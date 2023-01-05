@@ -1,0 +1,41 @@
+appName: gp_cpab
+logLevel: WARN
+
+GPSetup:
+    Option: "multitask"
+    Tasks: 3 #4 #9 #4 #16 #20 # This parameter would depend on the alphabet size for the sequences, so I have to do more adaptive in the future
+    Initialization: 0.33 #0.25 #0.111 #0.25 #0.125 #0.25 #0.0625 #0.05
+    Lengthscale: 0.1 #1.0 # 0.1
+    noise_constraint: [0,0.000004]
+Paths:
+    PathOrig: "../data/orig_3aa.fasta"
+    PathOrig8: "../data/orig_8aa.fasta"
+    PathOrig2seq: "../data/orig_2seq_3a.fasta"
+    PathMSAref8: "../data/ref_8aa.aln"
+    PathMSAref: "../data/ref_3aa.aln"
+    PathMSAref3: "../data/ref_3aa3g.aln"
+    PathMSAref3b: "../data/ref_3aa3gb.aln"
+    PathMSAref4: "../data/ref_3aa4g.aln"
+    PathMSAref4b: "../data/ref_3aa4gb.aln"
+    PathMSAref9: "../data/ref_3aa10g.aln"
+    PathMSAref9b: "../data/ref_3aa10gb.aln"
+    PathMSAalignment: "../data/PF00397_seed_unaligned_Pair.txt"
+    Path_Preexist_Model: "../models/CPABdeformGPB3.pth"
+    Path_Preexist_Modellinear: "../models/CPABlinear.pth"
+    Path_Preexist_ModelGP: "../models/CPABGPB.pth"
+    Path_Preexist_Likelihood: "../models/CPABdeform_likelihoodGPB3.pth"
+    Path_Automated_ReportFolder: "../Results"
+CPAB:
+    Device: "cpu"
+    Modeflag: "1D"
+    Window_grid: 50 #4 #55 #55 #15 #500 #200 for 2D
+    Channels: 3 #4 #9 #4 #16 #20
+    Interpolation_type: "GP"
+Optimization:
+    lr: 0.01 #0.01
+    weight_decay: 0.004
+    maxiter: 2000
+    LossFunctMetric: "CEmask"
+LogosPlot:
+    Scalefactor: 10
+    Mode: "see_train"

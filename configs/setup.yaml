@@ -1,0 +1,45 @@
+appName: gp_cpab
+logLevel: WARN
+
+GPSetup:
+    Option: "multitask"
+    Tasks: 4
+    Initialization: 0.25
+    Lengthscale: 0.1 # 0.1
+    noise_constraint: [0,0.0004]
+Paths:
+    PathOrig: "data/orig_3aa.fasta"
+    PathMSAref: "data/ref_3aa.aln"
+    PathMSAref2: "data/ref_3aa2g.aln"
+    PathMSAref2b: "data/ref_3aa2g_b.aln"
+    PathMSAref3: "data/ref_3aa3g.aln"
+    PathMSAref3b: "data/ref_3aa3g_b.aln"
+    PathMSAref4: "data/ref_3aa4g.aln"
+    PathMSAref9: "data/ref_3aa10g.aln"
+    Path_Preexist_Model: "models/CPABdeformGPB3.pth"
+    Path_Preexist_Modellinear: "models/CPABlinear.pth"
+    Path_Preexist_Modellinear2: "models/CPABlinear2.pth"
+    Path_Preexist_Modellinear3: "models/CPABlinear3.pth"
+    Path_Preexist_Modellinear4: "models/CPABlinear4.pth"
+    Path_Preexist_Modellinear9: "models/CPABlinear9.pth"
+    Path_Preexist_ModelGP: "models/CPABGPB.pth"
+    Path_Preexist_ModelGP2: "models/CPABGPB2.pth"
+    Path_Preexist_ModelGP3: "models/CPABGPB3.pth"
+    Path_Preexist_ModelGP4: "models/CPABGPB4.pth"
+    Path_Preexist_ModelGP9: "models/CPABGPB9.pth"    
+    Path_Preexist_Likelihood: "models/CPABdeform_likelihoodGPB3.pth"
+    Path_Automated_ReportFolder: "Results"
+CPAB:
+    Device: "cpu"
+    Modeflag: "1D"
+    Window_grid: 6 #55 #55 #15 #500 #200 for 2D
+    Channels: 4
+    Interpolation_type: "GP"
+Optimization:
+    lr: 0.01 #0.01
+    weight_decay: 0.0004
+    maxiter: 2000
+    LossFunctMetric: "CEmask"
+LogosPlot:
+    Scalefactor: 10
+    Mode: "see_train"

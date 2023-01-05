@@ -1,0 +1,5 @@
+INFO:root:NOTE: remember, both inverse and direct transformation are made over the same original grid, not the
+                normal configuration T(deformed_grid), because we are emulating the behavior of not having the historical information about
+                the deformed grid (normaly when we transformed the new data, this is not possible). That's why we are using as a solution 
+                just to make the interpolation strategy in inverse transforme just using the GP and for direct transform just using the linear
+                interpolation  

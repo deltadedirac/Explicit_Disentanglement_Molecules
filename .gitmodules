@@ -1,0 +1,6 @@
+[submodule "gp_cpab"]
+	path = src/gp_cpab
+	url = https://github.com/deltadedirac/gp_cpab.git
+[submodule "unsuper"]
+	path = src/unsuper
+	url = https://github.com/SkafteNicki/unsuper.git
