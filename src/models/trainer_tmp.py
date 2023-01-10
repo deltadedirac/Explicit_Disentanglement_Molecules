@@ -8,12 +8,12 @@ Created on Fri Oct 12 12:18:45 2018
 #%%
 import torch
 import numpy as np
-from torchvision.utils import make_grid
+#from torchvision.utils import make_grid
 from tqdm import tqdm
 import time, os, datetime, gc, pdb
 
 from tensorboardX import SummaryWriter
-from ..unsuper.unsuper.helper.losses import vae_loss
+#from ..unsuper.unsuper.helper.losses import vae_loss
 from .LossFunctionsAlternatives import LossFunctionsAlternatives
 
 

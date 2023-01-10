@@ -17,7 +17,9 @@ RUN if [ -f "/tmp/conda-tmp/environment.yml" ]; then umask 0002 && /opt/conda/bi
 #     && pip install --no-cache-dir pipx \
 #     && pipx reinstall-all
 
-RUN /opt/conda/bin/conda install pytorch torchvision torchaudio cpuonly -c pytorch-lts
+# It is necessary to specify version 0.91 in torchvision cause otherwise it generates 
+# and error related to the absense of a library called torch.ao, which influence the calculations
+RUN /opt/conda/bin/conda install pytorch torchvision=0.9.1 cpuonly -c pytorch-lts
 RUN /opt/conda/bin/conda install gpytorch -c gpytorch
 RUN /opt/conda/bin/conda install -c conda-forge mlflow
 RUN /opt/conda/bin/pip install tensorboard tensorboardx torch-tb-profiler pyfiglet
@@ -26,6 +28,8 @@ RUN /opt/conda/bin/conda install -c bioconda logomaker
 RUN /opt/conda/bin/conda install -c conda-forge biopython
 RUN /opt/conda/bin/conda install pandas numpy tqdm confuse seaborn
 RUN /opt/conda/bin/conda install -n base ipykernel --update-deps --force-reinstall
+RUN /opt/conda/bin/conda install -c conda-forge nbconvert
+RUN pip install papermill[all]
 
 # [Optional] Uncomment this section to install additional OS packages.
 # RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
