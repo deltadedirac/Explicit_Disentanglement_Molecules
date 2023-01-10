@@ -2,10 +2,10 @@ FROM mcr.microsoft.com/vscode/devcontainers/miniconda:0.201.4-3
 
 #RUN git clone https://github.com/BorisWilhelms/devcontainer.git
 #RUN git clone --recursive https://github.com/deltadedirac/Explicit_Disentanglement_Molecules.git
-COPY ../../ disentanglements_proteins 
+#COPY ../../ disentanglements_proteins 
 
 
-RUN /opt/conda/bin/conda install pytorch torchvision torchaudio cpuonly -c pytorch-lts
+RUN /opt/conda/bin/conda install pytorch torchvision=0.9.1 cpuonly -c pytorch-lts
 RUN /opt/conda/bin/conda install gpytorch -c gpytorch
 RUN /opt/conda/bin/conda install -c conda-forge mlflow
 RUN /opt/conda/bin/pip install tensorboard tensorboardx torch-tb-profiler pyfiglet
@@ -14,4 +14,5 @@ RUN /opt/conda/bin/conda install -c bioconda logomaker
 RUN /opt/conda/bin/conda install -c conda-forge biopython
 RUN /opt/conda/bin/conda install pandas numpy tqdm confuse seaborn
 RUN /opt/conda/bin/conda install -n base ipykernel --update-deps --force-reinstall
+RUN /opt/conda/bin/conda install -c conda-forge nbconvert
 RUN pip install papermill[all]
