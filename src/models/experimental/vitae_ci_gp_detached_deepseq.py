@@ -25,19 +25,9 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
 
         self.Trainprocess = True
         self.x_trans1 = torch.tensor([])
-        # Define outputdensities
-        if outputdensity == 'bernoulli':
-            outputnonlin = nn.Sigmoid()
-            #outputnonlin = nn.Softmax(dim=1)
-        elif outputdensity == 'gaussian':
-            outputnonlin = Identity()
-        elif outputdensity == 'softmax':
-            outputnonlin = nn.Softmax(dim=2)
-        elif outputdensity == 'log_softmax':
-            outputnonlin = nn.LogSoftmax(dim=2)
-        else:
-            ValueError('Unknown output density')
-        
+
+        #self.outputnonlin = nn.Softmax(dim=2)
+
         # Define encoder and decoder
         if isinstance(encoder,tuple) and isinstance(decoder,tuple):
             self.encoder1 = encoder[0](input_shape, latent_dim, layer_ini = self.alphabet)
@@ -56,7 +46,9 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
             return torch.sum(log_p, dim)
         else:
             return log_p
-
+    
+    def set_activator_for_STlayer(self, space='log'):
+        self.prior_space=space
 
     def log_standard_normal(self, x, reduction=None, dim=None):
         D = x.shape[1]
@@ -75,9 +67,9 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
             
     def get_deepsequence_nograd(self, x, DS):
         #x_copy = torch.tensor(x, requires_grad=False)
-        #with torch.no_grad():
-        DS.eval()
-        x_mean_no_grad, x_var_no_grad,_,__,____,_____ = DS(x) #_copy)
+        with torch.no_grad():
+            DS.eval()
+            x_mean_no_grad, x_var_no_grad,_,__,____,_____ = DS(x) #_copy)
         return x_mean_no_grad, x_var_no_grad
 
     def forward(self, x, deepS, eq_samples=1, iw_samples=1, switch=1.0):
@@ -91,7 +83,10 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
         # Transform input
         self.stn.st_gp_cpab.interpolation_type = 'GP'
         x_new = self.stn(x.repeat(eq_samples*iw_samples, 1, 1), theta_mean, self.Trainprocess, inverse=True)
-        
+
+        # In case of using the log space in the prior for avoid local minima 
+        #if self.prior_space=='log':
+        #    x_new = self.outputnonlin(x_new)
         '''-------------------------------------------------------------------------------------------------------'''
         # Pretrained DeepSequence Output
         x_mean_no_grad, x_var_no_grad = self.get_deepsequence_nograd(x_new,deepS)
@@ -104,6 +99,11 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
         x_mean = self.stn(x_mean, theta_mean,  self.Trainprocess, inverse=False)
         x_var = self.stn(x_var, theta_mean, self.Trainprocess, inverse=False)
         x_var = switch*x_var + (1-switch)*0.02**2
+
+        # In case of using the log space in the prior for avoid local minima 
+        #if self.prior_space=='log':
+        #    x_mean = self.outputnonlin(x_mean)
+        #    x_var = self.outputnonlin(x_var)
         
         return x_mean.contiguous(), \
                 x_var.contiguous(), [z1, None], [mu1, None], [var1, None], x_new, theta_mean, KLD

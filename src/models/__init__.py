@@ -7,8 +7,8 @@ Created on Tue Sep 18 12:48:18 2018
 """
 
 #from .vitae_ci_gp import VITAE_CI
-#from src.unsuper.unsuper.models.vae import VAE
-#from src.unsuper.unsuper.models.vitae_ui import VITAE_UI
+from src.unsuper.unsuper.models.vae import VAE
+from src.unsuper.unsuper.models.vitae_ui import VITAE_UI
 from src.models.vitae_ci_gp_tmp import VITAE_CI
 
 #%%
