@@ -1,0 +1,29 @@
+name: latent_msaprot_env
+channels:
+ - defaults
+ - conda-forge
+ - bioconda
+dependencies:
+ - python=3.8
+ - cudatoolkit
+ - cudnn
+ #- pytorch=1.8.1
+ #- torchvision=0.9.1
+ #- gpytorch
+ #- mlflow
+ #- dpath
+ #- logomaker
+ #- biopython
+ #- pandas
+ #- numpy
+ #- tqdm
+ #- confuse
+ #- seaborn
+ #- ipykernel
+ #- nbconvert
+ #- pip:
+ # - tensorboard
+ # - tensorboardx
+ # - torch-tb-profiler
+ # - pyfiglet
+ # - papermill[all]
