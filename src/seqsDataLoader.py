@@ -51,7 +51,7 @@ class seqsReader():
 
 
     @staticmethod
-    def define_dataset_variablelength_seqs(path):
+    def define_dataset_variablelength_seqs(path, **kargs):
             # Read your fasta file
             identifiers = []
             lengths = []
@@ -70,8 +70,10 @@ class seqsReader():
             seqs = np.array(seqs,dtype=object)
             seqs_np = np.concatenate(np.array(seqs))
             #pdb.set_trace()
-            #alphabet = np.unique(seqs_np).tolist()
-            alphabet = np.unique(seqs_np).tolist()
+            if 'alphabet'  in kargs:
+                alphabet = kargs['alphabet']
+            else:
+                alphabet = np.unique(seqs_np).tolist()
             num_classes = len(alphabet)#np.unique(seqs_np).shape[0]
             # To create a dictionary of correspondences between the aminoacids and the numerical order.
             c2i, i2c, i2i = seqsReader._predefine_encoding(alphabet)
@@ -108,7 +110,7 @@ class seqsReader():
 
 
     @staticmethod
-    def read_clustal_align_output(path):
+    def read_clustal_align_output(path, **kargs):
         #pdb.set_trace()
         msa = []
 
@@ -116,8 +118,10 @@ class seqsReader():
         for sequence in align:
             msa.append(np.array(list(sequence.seq)))
 
-        #msa = np.array(msa)
-        alphabet = np.unique(msa).tolist()
+        if 'alphabet'  in kargs:
+            alphabet = kargs['alphabet']
+        else:
+            alphabet = np.unique(msa).tolist()
 
         # To create a dictionary of correspondences between the aminoacids and the numerical order.
         c2i, i2c, i2i = seqsReader._predefine_encoding(alphabet)
@@ -136,10 +140,14 @@ class seqsDatasetLoader(torch.utils.data.Dataset):
 
         self.prot_space, self.identifiers, self.lengths, self.num_classes, \
             self.alphabet, self.c2i, self.i2c, self.i2i,self.padded_idx, self.non_padded_idx = seqsReader.define_dataset_variablelength_seqs(\
-                                                                                                            kwargs.get("pathBLAT_data") )
-        self.shape_dataset = self.prot_space.shape
+                                                                                                       kwargs.get("pathBLAT_data"), alphabet = kwargs.get("alphabet") )
 
-        
+        if 'device' in kwargs:
+            device = kwargs['device']
+            if type(device)==str:
+                device = torch.device("cuda") if device=="gpu" else torch.device("cpu")
+        self.prot_space = torch.tensor(self.prot_space, dtype=torch.float32, device=device)
+
     def is_num_nparray(self,a):
         flag=True
         try:
@@ -149,7 +157,6 @@ class seqsDatasetLoader(torch.utils.data.Dataset):
         return flag
     
     def get_paddings_per_batch(self, n_batch, batch_size, offset = 0):
-        #range_batch = [ *range(n_batch*batch_size, (n_batch + 1)* batch_size - offset ) ]
         return self.padded_idx[n_batch*batch_size : (n_batch + 1)* batch_size - offset], \
                self.non_padded_idx[n_batch*batch_size : (n_batch + 1)* batch_size - offset]
 

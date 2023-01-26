@@ -72,6 +72,7 @@ class ST_GP_CPAB(torch.nn.Module):
         else:
             outsize = (x.shape[1], x.shape[2]) 
 
+        """
         if 'padding_option' in kargs:
             padding_option = kargs['padding_option']
             padded_idx = kargs['padded_idx']
@@ -83,6 +84,7 @@ class ST_GP_CPAB(torch.nn.Module):
                                             padding_option = padding_option   )
         else:
             self.st_gp_cpab.get_interpolation_inductive_points(x, x.float(), outsize = outsize)
+        """
 
     
     def forward(self, x, theta, outsize, inverse=False, **kargs):
