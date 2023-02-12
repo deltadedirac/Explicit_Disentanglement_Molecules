@@ -49,6 +49,22 @@ class seqsReader():
  
         return padding_idx, one_hot_chunks
 
+    @staticmethod
+    def padding_strategy(list_sequences, value, path_strategy='constant'):
+        import math
+        max_l_seq = max([ i.shape[1] for i in list_sequences])
+        padded_seqs = []
+        for tt in list_sequences:
+
+            len_seq = math.abs(tt.shape[1] - max_l_seq)
+            pad = ( (np.floor(len_seq/2) , np.round(len_seq/2)), \
+                    (0,len_seq)  )[ path_strategy=='constant' ]
+
+            padded_seqs.append(F.pad(tt, pad, path_strategy, value))
+
+        return padded_seqs
+
+
 
     @staticmethod
     def define_dataset_variablelength_seqs(path, **kargs):
@@ -80,9 +96,9 @@ class seqsReader():
 
             #family_seqs = np.array([ np.array([ self.c2i[elem] for elem in seq ]) for seq in seqs ] )
             family_seqs = [ torch.from_numpy(np.array([ c2i[elem] for elem in seq ])) for seq in seqs ]
-            #pdb.set_trace()
             
             family_seqs = torch.nn.utils.rnn.pad_sequence(family_seqs, batch_first=True, padding_value = padded_val)
+            #family_seqs = padding_strategy(family_seqs, padded_val)
 
             #num_classes = np.unique(family_seqs).shape[0]
             #alphabet = np.unique(family_seqs).tolist()

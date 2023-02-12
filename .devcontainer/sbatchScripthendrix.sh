@@ -14,5 +14,5 @@
 
 echo $CUDA_VISIBLE_DEVICES
 cd ../tests
-papermill WW_test.ipynb myoutend17jan2023.ipynb
+papermill WW_test_22_channel.ipynb myout_try.ipynb --log-output --log-level DEBUG --progress-bar
 jupyter nbconvert --to markdown myoutend17jan2023.ipynb

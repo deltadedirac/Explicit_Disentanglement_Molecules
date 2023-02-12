@@ -75,6 +75,15 @@ class DeepSequence(nn.Module):
         return x_mean.contiguous(), \
                 x_var.contiguous(), z, mu, var, KLD
 
+    def sample(self, n, switch=1.0):
+        device = self.device
+        with torch.no_grad():
+            z = torch.randn(n, self.latent_dim, device=device)
+            x_mean, x_var = self.decoder(z)
+            x_var = switch*x_var + (1-switch)*0.02**2
+            return x_mean.contiguous(), \
+                            x_var.contiguous(), z
+
 
 
     def training_representation( self, trainloader, loss_function, optimizer, n_epochs=10, warmup=1, logdir='', out_modelname='trained_model.pth',eq_samples=1, iw_samples=1, beta=1.0):

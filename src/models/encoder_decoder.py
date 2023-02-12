@@ -139,6 +139,47 @@ class mlp_decoder(nn.Module):
         return x_mu, x_var
 
 #%%    
+import torch
+class conv_attention(nn.Module):
+    
+    def __init__(self, channel_shape, shape_signal, kernel):
+        super(conv_attention, self).__init__()
+        self.channel_dim = channel_shape
+        self.input_shape = shape_signal
+        self.final_out_cnn = self.calc_conv_length_out( self.input_shape[0] , 3, c_pad = 1, dil = 1, k_size = kernel, c_stride =1)
+
+        self.encoder = nn.Sequential(
+            nn.Conv1d(self.channel_dim, 12, kernel_size=kernel, stride=1, padding=1),
+            nn.LeakyReLU(0.1),
+            nn.Conv1d(12, 12, kernel_size=kernel, stride=1, padding=1),
+            nn.LeakyReLU(0.1),
+            nn.Conv1d(12, 12, kernel_size=kernel, stride=1, padding=1),
+            nn.LeakyReLU(0.1),
+            Flatten(),
+            # To be fixable and automatic when the new molecule domains comes by
+            nn.Linear(12*self.final_out_cnn, np.prod(self.input_shape))
+            #nn.Linear(self.final_out_cnn, self.input_shape[0])
+        )
+
+    def calc_conv_length_out(self, l , cont, c_pad = 1, dil = 1, k_size = 3, c_stride =1):
+        #import pdb; pdb.set_trace()
+        if cont>0:
+            l = min( l, self.calc_conv_length_out( int( 1 + ( l + 2*c_pad - dil*( k_size - 1) - 1 )/c_stride ), 
+                                             cont-1, c_pad = c_pad, 
+                                             dil = dil, 
+                                             k_size = k_size, 
+                                             c_stride =c_stride))
+
+        return l
+        
+                
+    def forward(self, x):
+        z = self.encoder(x)
+        z= z.reshape(-1, *(self.input_shape))
+        return torch.nn.Softmax(dim=1)(z)
+
+#%%    
+
 class conv_encoder(nn.Module):
     def __init__(self, input_shape, latent_dim, **kwargs):
         super(conv_encoder, self).__init__()

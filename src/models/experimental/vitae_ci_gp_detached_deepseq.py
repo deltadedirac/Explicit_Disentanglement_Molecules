@@ -70,6 +70,8 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
         with torch.no_grad():
             DS.eval()
             x_mean_no_grad, x_var_no_grad,_,__,____,_____ = DS(x) #_copy)
+        '''DS.eval()
+        x_mean_no_grad, x_var_no_grad,_,__,____,_____ = DS(x)'''
         return x_mean_no_grad, x_var_no_grad
 
     def forward(self, x, deepS, eq_samples=1, iw_samples=1, switch=1.0):
