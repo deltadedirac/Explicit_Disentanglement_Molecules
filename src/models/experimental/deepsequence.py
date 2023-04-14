@@ -44,8 +44,8 @@ class DeepSequence(nn.Module):
         self.device = device
         
         # Define encoder and decoder
-        self.encoder = mlp_encoder(input_shape, latent_dim, layer_ini = self.alphabet)
-        self.decoder = mlp_decoder(input_shape, latent_dim, self.outputnonlin, layer_ini = self.alphabet)
+        self.encoder = mlp_encoder(input_shape, latent_dim, layer_ini = self.alphabet).to(self.device)
+        self.decoder = mlp_decoder(input_shape, latent_dim, self.outputnonlin, layer_ini = self.alphabet).to(self.device)
 
     def KL(self, z, mu, log_var):
         log_z = log_standard_normal(z)
@@ -67,10 +67,10 @@ class DeepSequence(nn.Module):
         # Encode/decode semantic space
         mu, var = self.encoder(x)
         z = self.reparameterize(mu, var, 1, 1)
+        KLD = self.KL(z, mu, var) 
         x_mean, x_var = self.decoder(z)  
         '''-------------------------------------------------------------------------------------------------------'''
         x_var = switch*x_var + (1-switch)*0.02**2
-        KLD = self.KL(z, mu, var) 
         
         return x_mean.contiguous(), \
                 x_var.contiguous(), z, mu, var, KLD

@@ -1,5 +1,6 @@
 from ..vitae_ci_gp_tmp import *
 from ..encoder_decoder import conv_attention
+import numpy as np
 PI = torch.from_numpy(np.asarray(np.pi))
 
 
@@ -8,7 +9,17 @@ class Flatten(nn.Module):
         super(Flatten, self).__init__()
     
     def forward(self, input):
-        return input.view(input.size(0), -1)   
+        return input.view(input.size(0), -1)
+    
+class Regularizer(nn.Module):
+    def __init__(self, default_val = 1e-7, n_comps=60):
+        super(Regularizer, self).__init__()
+        self.Regularizer = torch.nn.Parameter( data = torch.tensor([default_val],requires_grad=True),  requires_grad=True)
+
+    
+    def forward(self, input):
+        return input*self.Regularizer   
+    
 
 class PGM_latent_alignment(VITAE_CI):
 
@@ -21,30 +32,37 @@ class PGM_latent_alignment(VITAE_CI):
         self.latent_spaces = latent_dim
         self.outputdensity = outputdensity
         self.alphabet = kwargs["alphabet_size"]
-        ndim, device, gp_params = kwargs["trans_parameters"]
+        ndim, self.device, gp_params = kwargs["trans_parameters"]
+        self.Regularizer = Regularizer(1e-7, ndim[0]+1)
 
         # Spatial transformer
         
         self.ST_type = ST_type
 
-        self.stn = get_transformer(ST_type)(ndim, config, backend='pytorch', device=device, zero_boundary=False,
+        self.stn = get_transformer(ST_type)(ndim, config, backend='pytorch', device=self.device, zero_boundary=False,
                                           volume_perservation=False, override=False, argparser_gpdata = gp_params)
 
         self.Trainprocess = True
 
         self.diag_domain = kwargs['diagonal_att_regions']
-        self.attention =  conv_attention(channel_shape=abs(self.diag_domain[0]) + abs(self.diag_domain[1] + 1), 
-                                        shape_signal=self.input_shape, kernel=3)
+        #self.attention =  conv_attention(channel_shape=abs(self.diag_domain[0]) + abs(self.diag_domain[1] + 1), 
+        #                                shape_signal=self.input_shape, kernel=3)
 
+        self.diagonal_comps = np.sum(np.absolute(self.diag_domain))+1
+        self.attention =  conv_attention(channel_shape=np.sum(np.absolute(self.diag_domain))+1,
+                                         input_shape = self.input_shape,
+                                        shape_signal=self.input_shape[0],
+                                        kernel=5).to(torch.device(self.device))
 
         # Define encoder and decoder
         if isinstance(encoder,tuple) and isinstance(decoder,tuple):
-            self.encoder1 = encoder[0](input_shape, latent_dim, layer_ini = self.alphabet)
-            self.decoder1 = decoder[0]((self.stn.dim(),), latent_dim, Identity(), layer_ini = self.alphabet)
+            self.encoder1 = encoder[0](input_shape, latent_dim, layer_ini = self.alphabet).to(torch.device(self.device))
+            self.decoder1 = decoder[0]((self.stn.dim(),), latent_dim, Identity(), layer_ini = self.alphabet).to(torch.device(self.device))
             
         else:
-            self.encoder1 = encoder(input_shape, latent_dim, layer_ini = self.alphabet)
-            self.decoder1 = decoder((self.stn.dim(),), latent_dim, Identity(), layer_ini = self.alphabet)
+            #self.encoder1 = encoder(input_shape, latent_dim, layer_ini = self.alphabet)
+            self.encoder1 = encoder([self.diagonal_comps, self.input_shape[0]], latent_dim, layer_ini = self.alphabet).to(torch.device(self.device))
+            self.decoder1 = decoder((self.stn.dim(),), latent_dim, Identity(), layer_ini = self.alphabet).to(torch.device(self.device))
 
 
 
@@ -87,6 +105,7 @@ class PGM_latent_alignment(VITAE_CI):
         MC_sample = torch.mean(set_of_samples, dim=0)
         return MC_sample
 
+    '''
     def get_diagonal_attention(self, Matrix, comp, min_r, max_r, list_attention = []):
         # Works assuming that we are dealing with square matrixes
         if comp <= max_r and comp >= min_r:
@@ -104,6 +123,45 @@ class PGM_latent_alignment(VITAE_CI):
 
         batch_diag_attention = torch.stack(list_batch)
         return batch_diag_attention
+    '''
+
+    def get_diagonal_attention(self, Matrix, comp, min_r, max_r, list_attention = []):
+    # Works assuming that we are dealing with square matrixes
+
+        if comp <= max_r and comp >= min_r:
+            prod_diag = torch.diagonal(Matrix, comp)
+            min_val = Matrix.min().item()              # to specify the gaps
+            #min_val = 0 #prod_diag.min().item()
+            if comp > 0 and len(prod_diag) < len(Matrix):
+
+                list_attention.append( torch.cat( 
+                    ( prod_diag, torch.tensor([min_val]* ( len(Matrix) - len(prod_diag)) ).to(torch.device(self.device))  )
+                    )   )
+            elif comp < 0 and len(prod_diag) < len(Matrix):
+                list_attention.append( torch.cat( 
+                    ( torch.tensor([min_val]* (len(Matrix) - len(prod_diag) )).to(torch.device(self.device)) , prod_diag ) # change 0 for prod_diag.min()
+                    )   )
+            else:
+                list_attention.append( torch.diagonal(Matrix, comp) )
+            
+            self.get_diagonal_attention(Matrix, comp-1, min_r, max_r, list_attention)
+
+
+    def get_batch_diagonal_attention(self, Matrix, comp, min_r, max_r):
+        list_batch = []
+        list_attention = []
+
+        for m in Matrix:
+            if max_r == None or min_r == None:
+                list_batch.append( m.T )
+            else:
+                self.get_diagonal_attention(m, comp, min_r, max_r, list_attention )
+                list_batch.append(   torch.fliplr(torch.column_stack(list_attention) )  )
+            list_attention.clear()
+
+        batch_diag_attention = torch.stack(list_batch)
+        return batch_diag_attention
+
 
     def get_attention_matrix(self, raw_seqs, DS, iters=100):
 
@@ -121,19 +179,23 @@ class PGM_latent_alignment(VITAE_CI):
         # Encode/decode transformer space
 
         # extract the attention mechanisms between the
-        l_attention = self.get_attention_matrix(x,deepS, iters=100)
-        batch_diagonal_regions =  self.get_batch_diagonal_attention(l_attention, self.diag_domain[0], self.diag_domain[1])
+        l_attention = self.get_attention_matrix(x,deepS, iters=1000)
+        #batch_diagonal_regions =  self.get_batch_diagonal_attention(l_attention, self.diag_domain[0], self.diag_domain[1])
+        batch_diagonal_regions =  self.get_batch_diagonal_attention(l_attention, self.diag_domain[1], self.diag_domain[0], self.diag_domain[1])
 
-        attention_repr = self.attention(batch_diagonal_regions)
+        attention_repr = self.attention(batch_diagonal_regions.permute(0,2,1))
+
 
         mu1, var1 = self.encoder1(attention_repr)
         z1 = self.reparameterize(mu1, var1, eq_samples, iw_samples)
-        theta_mean, theta_var = self.decoder1(z1)
+        theta_mean, theta_var = self.decoder1(z1) # JUST TO SEE IF THIS SCALING WORKS
+        theta_mean = self.Regularizer(theta_mean)
+
         KLD = self.KL(z1, mu1, var1)
 
         # Transform input
         self.stn.st_gp_cpab.interpolation_type = 'GP'
-        x_new = self.stn(x.repeat(eq_samples*iw_samples, 1, 1), theta_mean, self.Trainprocess, inverse=True)
+        x_new = self.stn(x.repeat(eq_samples*iw_samples, 1, 1), theta_mean, self.Trainprocess, inverse=True).to(torch.device(self.device))
 
         # In case of using the log space in the prior for avoid local minima 
         #if self.prior_space=='log':
@@ -147,9 +209,9 @@ class PGM_latent_alignment(VITAE_CI):
         '''-------------------------------------------------------------------------------------------------------'''
         # "Detransform" output
         self.stn.st_gp_cpab.interpolation_type = 'GP' 
-        x_mean = self.stn(x_mean, theta_mean,  self.Trainprocess, inverse=False)
-        x_var = self.stn(x_var, theta_mean, self.Trainprocess, inverse=False)
-        x_var = switch*x_var + (1-switch)*0.02**2
+        x_mean = self.stn(x_mean, theta_mean,  self.Trainprocess, inverse=False).to(torch.device(self.device))
+        #x_var = self.stn(x_var, theta_mean, self.Trainprocess, inverse=False).to(torch.device(self.device))
+        #x_var = switch*x_var + (1-switch)*0.02**2
 
         # In case of using the log space in the prior for avoid local minima 
         #if self.prior_space=='log':

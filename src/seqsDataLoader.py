@@ -161,7 +161,7 @@ class seqsDatasetLoader(torch.utils.data.Dataset):
         if 'device' in kwargs:
             device = kwargs['device']
             if type(device)==str:
-                device = torch.device("cuda") if device=="gpu" else torch.device("cpu")
+                device = torch.device("cuda") if device=="gpu" else torch.device("cpu") if device=='cpu' else torch.device('mps')
         self.prot_space = torch.tensor(self.prot_space, dtype=torch.float32, device=device)
 
     def is_num_nparray(self,a):

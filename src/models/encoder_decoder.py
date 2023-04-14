@@ -56,7 +56,14 @@ def calculate_features_cat_size(l , c_pad = 1, dil = 1, k_size = 3, c_stride =1)
   #import pdb; pdb.set_trace()
   l_out = int( 1 + ( l + 2*c_pad - dil*( k_size - 1) - 1 )/c_stride )
   return l_out
+#%%
+class Resizing(nn.Module):
+    def __init__(self, input_shape):
+        super(Resizing, self).__init__()
+        self.resize = input_shape
 
+    def forward(self, x):
+        return x.reshape(-1, *self.resize)
 #%%
 #best setup 512,256,latent_dim -> latent_dim,256,512
 class mlp_encoder(nn.Module):
@@ -81,13 +88,17 @@ class mlp_encoder(nn.Module):
             nn.Linear(256, latent_dim),
             nn.Softplus(),
         )
-        #self.encoder_mu.apply(self._init_weights)
-        #self.encoder_var.apply(self._init_weights)
+        self.encoder_mu.apply(self._init_weights)
+        self.encoder_var.apply(self._init_weights)
     
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
             nn.init.kaiming_normal_(module.weight)
-            nn.init.constant_(module.bias, 0)
+            #nn.init.constant_(module.bias, 0)
+            #nn.init.zeros_(module.weight)
+            #nn.init.normal_(module.weight,mean=0, std=1e-8 ) # works on 1e-6, DONT FORGET
+
+
         
     def forward(self, x):
         x = x.reshape(x.shape[0], -1)
@@ -111,73 +122,118 @@ class mlp_decoder(nn.Module):
             nn.Linear(256, 512),
             nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(512, self.flat_dim),
+            Resizing(self.output_shape),
+            self.outputnonlin
             #nn.LeakyReLU(0.1) #nn.ReLU(),
         )
+        
         self.decoder_var = nn.Sequential(
             nn.Linear(latent_dim, 256),
             nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(256, 512),
             nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(512, self.flat_dim),
+            Resizing(self.output_shape),
+            nn.Softplus()
             #nn.LeakyReLU(0.1) #nn.ReLU(),
         )
-        #self.decoder_mu.apply(self._init_weights)
-        #self.decoder_var.apply(self._init_weights)
+        
+        self.decoder_mu.apply(self._init_weights)
+        self.decoder_var.apply(self._init_weights)
     
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
+            #nn.init.zeros_(module.weight)
             nn.init.kaiming_normal_(module.weight)
-            nn.init.constant_(module.bias, 0)
+            #nn.init.normal_(module.weight,mean=0, std=1e-8 ) # works on 1e-6, DONT FORGET
+            #nn.init.constant_(module.bias, 0)
         
     def forward(self, z):
         #pdb.set_trace()
+        '''
         x_mu = self.decoder_mu(z).reshape(-1, *self.output_shape)
         x_mu = self.outputnonlin(x_mu)
 
         x_var = self.decoder_var(z).reshape(-1, *self.output_shape)
         x_var = nn.Softplus()(x_var)
+        '''
+        x_mu = self.decoder_mu(z)
+        x_var = self.decoder_var(z)
         return x_mu, x_var
 
 #%%    
 import torch
 class conv_attention(nn.Module):
     
-    def __init__(self, channel_shape, shape_signal, kernel):
+    def __init__(self, channel_shape, input_shape, shape_signal, kernel):
         super(conv_attention, self).__init__()
         self.channel_dim = channel_shape
-        self.input_shape = shape_signal
-        self.final_out_cnn = self.calc_conv_length_out( self.input_shape[0] , 3, c_pad = 1, dil = 1, k_size = kernel, c_stride =1)
+        self.input_shape = input_shape # pos0 = #channels, pos1 = #diagonal comps, or viseversa
+        len_diagonal_comp = shape_signal #e.g. [39,22], if I choose 
 
         self.encoder = nn.Sequential(
-            nn.Conv1d(self.channel_dim, 12, kernel_size=kernel, stride=1, padding=1),
+            nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel, stride=1, padding=kernel//2),
             nn.LeakyReLU(0.1),
-            nn.Conv1d(12, 12, kernel_size=kernel, stride=1, padding=1),
+            nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel, stride=1, padding=kernel//2),
             nn.LeakyReLU(0.1),
-            nn.Conv1d(12, 12, kernel_size=kernel, stride=1, padding=1),
-            nn.LeakyReLU(0.1),
-            Flatten(),
-            # To be fixable and automatic when the new molecule domains comes by
-            nn.Linear(12*self.final_out_cnn, np.prod(self.input_shape))
-            #nn.Linear(self.final_out_cnn, self.input_shape[0])
+            nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel, stride=1, padding=kernel//2),
         )
-
-    def calc_conv_length_out(self, l , cont, c_pad = 1, dil = 1, k_size = 3, c_stride =1):
-        #import pdb; pdb.set_trace()
-        if cont>0:
-            l = min( l, self.calc_conv_length_out( int( 1 + ( l + 2*c_pad - dil*( k_size - 1) - 1 )/c_stride ), 
-                                             cont-1, c_pad = c_pad, 
-                                             dil = dil, 
-                                             k_size = k_size, 
-                                             c_stride =c_stride))
-
-        return l
         
-                
+        self.encoder.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Conv1d):
+            #nn.init.zeros_(module.weight)
+            nn.init.kaiming_normal_(module.weight)
+            #nn.init.constant_(module.bias, 0)
+
     def forward(self, x):
         z = self.encoder(x)
-        z= z.reshape(-1, *(self.input_shape))
-        return torch.nn.Softmax(dim=1)(z)
+        return z #z.permute(0,2,1) 
 
+#%%
+
+class conv_attention2(nn.Module):
+    
+    def __init__(self, channel_shape, input_shape, shape_signal, kernel, deconv_flat_out):
+        super(conv_attention2, self).__init__()
+        self.channel_dim = channel_shape
+        self.input_shape = input_shape # pos0 = #channels, pos1 = #diagonal comps, or viseversa
+        len_diagonal_comp = shape_signal #e.g. [39,22], if I choose 
+        self.deconv_out = deconv_flat_out
+
+        channel_size_convs=[10,5]
+        channel_size_deconvs=[15,28]
+        kernel_cnn = kernel
+        kernel_decnn = 30 #15
+
+
+        self.encoder = nn.Sequential(
+            nn.BatchNorm1d(self.channel_dim),
+            nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel_cnn, stride=1, padding=kernel_cnn//2), # the default was 10
+            nn.LeakyReLU(0.1),
+            nn.Conv1d(self.channel_dim,self.channel_dim, kernel_size=kernel_cnn, stride=1, padding=kernel_cnn//2),
+            nn.LeakyReLU(0.1),
+            nn.Conv1d(self.channel_dim,self.channel_dim, kernel_size=kernel_cnn, stride=1, padding=kernel_cnn//2),
+            nn.LeakyReLU(0.1),
+            #nn.Dropout(0.1),
+            #nn.AvgPool1d(kernel_size = 3, stride=1, padding=1),
+        )
+
+        self.upsampling = nn.Sequential(
+            #nn.ConvTranspose1d(10, 10, kernel_size=kernel_cnn, stride=2, padding=kernel_cnn//2, output_padding=1),
+            nn.Upsample(scale_factor=2, mode='linear'),
+            nn.LeakyReLU(0.1),
+            nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel_cnn, stride=1, padding=kernel_cnn//2),   #(15, 28)
+            nn.LeakyReLU(0.1), #0.5
+            nn.Conv1d(self.channel_dim, 1, kernel_size=1, stride=1),   #(15, 28)
+            #Flatten()
+        )
+                    
+    def forward(self, x):
+        z = self.encoder(x)
+        z = self.upsampling(z).squeeze(1)
+        return z
 #%%    
 
 class conv_encoder(nn.Module):
@@ -185,64 +241,45 @@ class conv_encoder(nn.Module):
         super(conv_encoder, self).__init__()
         self.latent_dim = latent_dim
         self.alphabet_layer_ini = kwargs["layer_ini"]
-        #import pdb;pdb.set_trace()
-        num_convs = 3
-        #pdb.set_trace()
-        self.conv1_out_lenght = input_shape[0]
+        self.len_seqs, self.channel = input_shape
+        kernel_cnn=5
 
-        for i in range(0,num_convs):
-            self.conv1_out_lenght = calculate_features_cat_size(self.conv1_out_lenght, c_pad = 1, dil = 1, k_size = 3, c_stride =1)
 
         self.encoder_mu = nn.Sequential(
-            #nn.BatchNorm1d(input_shape[0]),
-            nn.Conv1d(self.alphabet_layer_ini, 64, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv1d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv1d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
+            #nn.Conv1d(self.alphabet_layer_ini, 64, kernel_size=kernel_cnn, stride=1, padding=kernel_cnn//2),
+            nn.Conv1d(self.channel, self.channel, kernel_size=kernel_cnn, stride=1, padding=kernel_cnn//2),
+            nn.LeakyReLU(0.1),
+            nn.Conv1d(self.channel, self.channel, kernel_size=kernel_cnn, stride=1, padding=kernel_cnn//2),
+            nn.LeakyReLU(0.1),
+            nn.Conv1d(self.channel, self.channel, kernel_size=kernel_cnn, stride=1, padding=kernel_cnn//2),
+            nn.LeakyReLU(0.1),
             Flatten(),
-            #nn.Linear(64*1*self.alphabet_layer_ini, 128),
-            #nn.Linear(384, 128),
-            nn.Linear(64*1*self.conv1_out_lenght, 128),
-            nn.ReLU(),
-            nn.Linear(128, latent_dim)
-
+            nn.Linear(self.channel*self.len_seqs, self.latent_dim)
         )
         self.encoder_var = nn.Sequential(
-            #nn.BatchNorm1d(input_shape[0]),
-            nn.Conv1d(self.alphabet_layer_ini, 64, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv1d(64, 64, kernel_size=3, stride=1, padding=1),   #64
-            nn.ReLU(),
-            nn.Conv1d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
+            nn.Conv1d(self.channel, self.channel, kernel_size=kernel_cnn, stride=1, padding=kernel_cnn//2),
+            nn.LeakyReLU(0.1),
+            nn.Conv1d(self.channel, self.channel, kernel_size=kernel_cnn, stride=1, padding=kernel_cnn//2),   #64
+            nn.LeakyReLU(0.1),
+            nn.Conv1d(self.channel, self.channel, kernel_size=kernel_cnn, stride=1, padding=kernel_cnn//2),
+            nn.LeakyReLU(0.1),
             Flatten(),
-            #nn.Linear(64*1*self.alphabet_layer_ini, 128),
-            #nn.Linear(384, 128),
-            nn.Linear(64*1*self.conv1_out_lenght, 128),
-            nn.ReLU(),
-            nn.Linear(128, latent_dim),
+            nn.Linear(self.channel*self.len_seqs, self.latent_dim),
             nn.Softplus()
         )
-        #self.encoder_mu.apply(self._init_weights)
-        #self.encoder_var.apply(self._init_weights)
+        self.encoder_mu.apply(self._init_weights)
+        self.encoder_var.apply(self._init_weights)
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight, mode = 'fan_in', nonlinearity='relu')
-            nn.init.constant_(module.bias, 0)
+            nn.init.zeros_(module.weight)
+            #nn.init.constant_(module.bias, 0)
                 
     def forward(self, x):
         #pdb.set_trace()
-        ''' TO DON'T ADD THE LINEAR LAYERS INTO THE NETWORK IS A HUUGEEEE MISTAKE, THOSE ARE NOT GOING TO BE INCLUDED INTO THE OPT IF I CONTINUE
-        TO DO IT LIKE THAT, FIX!!!!!!!!!!!!!!!!!!!!'''
         xx = x.permute(0,2,1)
         z_mu = self.encoder_mu(xx)
-        #z_mu = nn.Linear(z_mu.shape[1],self.latent_dim)(z_mu)
-
         z_var = self.encoder_var(xx)
-        #z_var = nn.Softplus()(nn.Linear(z_var.shape[1],self.latent_dim)(z_var))
         return z_mu, z_var
     
 #%%

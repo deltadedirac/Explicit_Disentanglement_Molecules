@@ -80,6 +80,7 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
         mu1, var1 = self.encoder1(x)
         z1 = self.reparameterize(mu1, var1, eq_samples, iw_samples)
         theta_mean, theta_var = self.decoder1(z1)
+        theta_mean = theta_mean
         KLD = self.KL(z1, mu1, var1)
 
         # Transform input
