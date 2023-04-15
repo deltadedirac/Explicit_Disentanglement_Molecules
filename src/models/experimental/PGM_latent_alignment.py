@@ -14,7 +14,7 @@ class Flatten(nn.Module):
 class Regularizer(nn.Module):
     def __init__(self, default_val = 1e-7, n_comps=60):
         super(Regularizer, self).__init__()
-        self.Regularizer = torch.nn.Parameter( data = torch.tensor([default_val],requires_grad=True),  requires_grad=True)
+        self.Regularizer = torch.nn.Parameter( data = torch.tensor([default_val]*n_comps ,requires_grad=True),  requires_grad=True)
 
     
     def forward(self, input):
@@ -33,7 +33,7 @@ class PGM_latent_alignment(VITAE_CI):
         self.outputdensity = outputdensity
         self.alphabet = kwargs["alphabet_size"]
         ndim, self.device, gp_params = kwargs["trans_parameters"]
-        self.Regularizer = Regularizer(1e-7, ndim[0]+1)
+        self.Regularizer = Regularizer(1e-6, ndim[0]+1)
 
         # Spatial transformer
         
@@ -61,6 +61,7 @@ class PGM_latent_alignment(VITAE_CI):
             
         else:
             #self.encoder1 = encoder(input_shape, latent_dim, layer_ini = self.alphabet)
+            #self.encoder1 = encoder([self.diagonal_comps, self.input_shape[0]], latent_dim, layer_ini = self.alphabet).to(torch.device(self.device))
             self.encoder1 = encoder([self.diagonal_comps, self.input_shape[0]], latent_dim, layer_ini = self.alphabet).to(torch.device(self.device))
             self.decoder1 = decoder((self.stn.dim(),), latent_dim, Identity(), layer_ini = self.alphabet).to(torch.device(self.device))
 
@@ -130,7 +131,7 @@ class PGM_latent_alignment(VITAE_CI):
 
         if comp <= max_r and comp >= min_r:
             prod_diag = torch.diagonal(Matrix, comp)
-            min_val = Matrix.min().item()              # to specify the gaps
+            min_val = 0 #Matrix.min().item()              # to specify the gaps
             #min_val = 0 #prod_diag.min().item()
             if comp > 0 and len(prod_diag) < len(Matrix):
 
@@ -205,7 +206,7 @@ class PGM_latent_alignment(VITAE_CI):
         x_mean_no_grad, x_var_no_grad = self.get_deepsequence_nograd(x_new,deepS)
 
         x_mean = torch.tensor(x_mean_no_grad, requires_grad=True)
-        x_var = torch.tensor(x_var_no_grad, requires_grad=True)
+        #x_var = torch.tensor(x_var_no_grad, requires_grad=True)
         '''-------------------------------------------------------------------------------------------------------'''
         # "Detransform" output
         self.stn.st_gp_cpab.interpolation_type = 'GP' 
@@ -219,7 +220,8 @@ class PGM_latent_alignment(VITAE_CI):
         #    x_var = self.outputnonlin(x_var)
         
         return x_mean.contiguous(), \
-                x_var.contiguous(), [z1, None], [mu1, None], [var1, None], x_new, theta_mean, KLD
+                None, \
+                    [z1, None], [mu1, None], [var1, None], x_new, theta_mean, KLD
 
 
     def sample_only_trans(self, x):

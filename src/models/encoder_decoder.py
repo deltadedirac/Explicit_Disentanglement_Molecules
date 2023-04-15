@@ -52,10 +52,7 @@ def get_list_decoders(decoder_name):
         list_models +=( models[i] ,)
     return list_models
 
-def calculate_features_cat_size(l , c_pad = 1, dil = 1, k_size = 3, c_stride =1):
-  #import pdb; pdb.set_trace()
-  l_out = int( 1 + ( l + 2*c_pad - dil*( k_size - 1) - 1 )/c_stride )
-  return l_out
+
 #%%
 class Resizing(nn.Module):
     def __init__(self, input_shape):
@@ -71,20 +68,20 @@ class mlp_encoder(nn.Module):
         super(mlp_encoder, self).__init__()
         self.flat_dim = np.prod(input_shape)
         self.encoder_mu = nn.Sequential(
-            #nn.BatchNorm1d(input_shape[0]),
+            #nn.BatchNorm1d(self.flat_dim), # flat_dim,512, 256 enc, dec backwards
             nn.Linear(self.flat_dim, 512),
-            nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(512, 256),
-            nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(256, latent_dim),
             #nn.LeakyReLU(0.1)
         )
         self.encoder_var = nn.Sequential(
-            #nn.BatchNorm1d(input_shape[0]),
+            #nn.BatchNorm1d(self.flat_dim),
             nn.Linear(self.flat_dim, 512),
-            nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(512, 256),
-            nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(256, latent_dim),
             nn.Softplus(),
         )
@@ -94,6 +91,8 @@ class mlp_encoder(nn.Module):
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
             nn.init.kaiming_normal_(module.weight)
+            #nn.init.kaiming_normal_(module.bias)
+
             #nn.init.constant_(module.bias, 0)
             #nn.init.zeros_(module.weight)
             #nn.init.normal_(module.weight,mean=0, std=1e-8 ) # works on 1e-6, DONT FORGET
@@ -102,7 +101,6 @@ class mlp_encoder(nn.Module):
         
     def forward(self, x):
         x = x.reshape(x.shape[0], -1)
-        #x = x.flatten()
         z_mu = self.encoder_mu(x)
         z_var = self.encoder_var(x)
         return z_mu, z_var
@@ -118,33 +116,35 @@ class mlp_decoder(nn.Module):
         
         self.decoder_mu = nn.Sequential(
             nn.Linear(latent_dim, 256),
-            nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(256, 512),
-            nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(512, self.flat_dim),
             Resizing(self.output_shape),
             self.outputnonlin
             #nn.LeakyReLU(0.1) #nn.ReLU(),
         )
         
-        self.decoder_var = nn.Sequential(
+        '''self.decoder_var = nn.Sequential(
             nn.Linear(latent_dim, 256),
-            nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(256, 512),
-            nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(512, self.flat_dim),
             Resizing(self.output_shape),
             nn.Softplus()
             #nn.LeakyReLU(0.1) #nn.ReLU(),
-        )
+        )'''
         
         self.decoder_mu.apply(self._init_weights)
-        self.decoder_var.apply(self._init_weights)
+        #self.decoder_var.apply(self._init_weights)
     
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
             #nn.init.zeros_(module.weight)
             nn.init.kaiming_normal_(module.weight)
+            #nn.init.kaiming_normal_(module.bias)
+
             #nn.init.normal_(module.weight,mean=0, std=1e-8 ) # works on 1e-6, DONT FORGET
             #nn.init.constant_(module.bias, 0)
         
@@ -158,8 +158,8 @@ class mlp_decoder(nn.Module):
         x_var = nn.Softplus()(x_var)
         '''
         x_mu = self.decoder_mu(z)
-        x_var = self.decoder_var(z)
-        return x_mu, x_var
+        #x_var = self.decoder_var(z)
+        return x_mu, None #x_var
 
 #%%    
 import torch
@@ -169,14 +169,14 @@ class conv_attention(nn.Module):
         super(conv_attention, self).__init__()
         self.channel_dim = channel_shape
         self.input_shape = input_shape # pos0 = #channels, pos1 = #diagonal comps, or viseversa
-        len_diagonal_comp = shape_signal #e.g. [39,22], if I choose 
 
         self.encoder = nn.Sequential(
+            #nn.BatchNorm1d(self.channel_dim),
             nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel, stride=1, padding=kernel//2),
-            nn.LeakyReLU(0.1),
+            nn.ReLU(),#nn.LeakyReLU(0.1),
             nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel, stride=1, padding=kernel//2),
-            nn.LeakyReLU(0.1),
-            nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel, stride=1, padding=kernel//2),
+            nn.ReLU(),#nn.LeakyReLU(0.1),
+            nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel, stride=1, padding=kernel//2)
         )
         
         self.encoder.apply(self._init_weights)
@@ -185,6 +185,8 @@ class conv_attention(nn.Module):
         if isinstance(module, nn.Conv1d):
             #nn.init.zeros_(module.weight)
             nn.init.kaiming_normal_(module.weight)
+            #nn.init.kaiming_normal_(module.bias)
+
             #nn.init.constant_(module.bias, 0)
 
     def forward(self, x):
@@ -199,13 +201,9 @@ class conv_attention2(nn.Module):
         super(conv_attention2, self).__init__()
         self.channel_dim = channel_shape
         self.input_shape = input_shape # pos0 = #channels, pos1 = #diagonal comps, or viseversa
-        len_diagonal_comp = shape_signal #e.g. [39,22], if I choose 
         self.deconv_out = deconv_flat_out
 
-        channel_size_convs=[10,5]
-        channel_size_deconvs=[15,28]
         kernel_cnn = kernel
-        kernel_decnn = 30 #15
 
 
         self.encoder = nn.Sequential(

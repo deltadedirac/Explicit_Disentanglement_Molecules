@@ -70,19 +70,21 @@ class DeepSequence(nn.Module):
         KLD = self.KL(z, mu, var) 
         x_mean, x_var = self.decoder(z)  
         '''-------------------------------------------------------------------------------------------------------'''
-        x_var = switch*x_var + (1-switch)*0.02**2
+        #x_var = switch*x_var + (1-switch)*0.02**2
         
         return x_mean.contiguous(), \
-                x_var.contiguous(), z, mu, var, KLD
+                None, \
+                z, mu, var, KLD
 
     def sample(self, n, switch=1.0):
         device = self.device
         with torch.no_grad():
             z = torch.randn(n, self.latent_dim, device=device)
             x_mean, x_var = self.decoder(z)
-            x_var = switch*x_var + (1-switch)*0.02**2
+            #x_var = switch*x_var + (1-switch)*0.02**2
             return x_mean.contiguous(), \
-                            x_var.contiguous(), z
+                            None, \
+                                z
 
 
 
