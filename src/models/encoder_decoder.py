@@ -70,31 +70,31 @@ class mlp_encoder(nn.Module):
         self.encoder_mu = nn.Sequential(
             #nn.BatchNorm1d(self.flat_dim), # flat_dim,512, 256 enc, dec backwards
             nn.Linear(self.flat_dim, 512),
-            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(512, 256),
-            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(256, latent_dim),
             #nn.LeakyReLU(0.1)
         )
         self.encoder_var = nn.Sequential(
             #nn.BatchNorm1d(self.flat_dim),
             nn.Linear(self.flat_dim, 512),
-            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(512, 256),
-            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(256, latent_dim),
             nn.Softplus(),
         )
-        self.encoder_mu.apply(self._init_weights)
-        self.encoder_var.apply(self._init_weights)
+        #self.encoder_mu.apply(self._init_weights)
+        #self.encoder_var.apply(self._init_weights)
     
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
-            nn.init.kaiming_normal_(module.weight)
+            #nn.init.kaiming_normal_(module.weight)
             #nn.init.kaiming_normal_(module.bias)
 
             #nn.init.constant_(module.bias, 0)
-            #nn.init.zeros_(module.weight)
+            nn.init.zeros_(module.weight)
             #nn.init.normal_(module.weight,mean=0, std=1e-8 ) # works on 1e-6, DONT FORGET
 
 
@@ -116,16 +116,16 @@ class mlp_decoder(nn.Module):
         
         self.decoder_mu = nn.Sequential(
             nn.Linear(latent_dim, 256),
-            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(256, 512),
-            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(512, self.flat_dim),
             Resizing(self.output_shape),
             self.outputnonlin
             #nn.LeakyReLU(0.1) #nn.ReLU(),
         )
         
-        '''self.decoder_var = nn.Sequential(
+        self.decoder_var = nn.Sequential(
             nn.Linear(latent_dim, 256),
             nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(256, 512),
@@ -134,15 +134,15 @@ class mlp_decoder(nn.Module):
             Resizing(self.output_shape),
             nn.Softplus()
             #nn.LeakyReLU(0.1) #nn.ReLU(),
-        )'''
+        )
         
-        self.decoder_mu.apply(self._init_weights)
+        #self.decoder_mu.apply(self._init_weights)
         #self.decoder_var.apply(self._init_weights)
     
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
-            #nn.init.zeros_(module.weight)
-            nn.init.kaiming_normal_(module.weight)
+            nn.init.zeros_(module.weight)
+            #nn.init.kaiming_normal_(module.weight)
             #nn.init.kaiming_normal_(module.bias)
 
             #nn.init.normal_(module.weight,mean=0, std=1e-8 ) # works on 1e-6, DONT FORGET
@@ -158,8 +158,8 @@ class mlp_decoder(nn.Module):
         x_var = nn.Softplus()(x_var)
         '''
         x_mu = self.decoder_mu(z)
-        #x_var = self.decoder_var(z)
-        return x_mu, None #x_var
+        x_var = self.decoder_var(z)
+        return x_mu, x_var
 
 #%%    
 import torch
@@ -173,18 +173,19 @@ class conv_attention(nn.Module):
         self.encoder = nn.Sequential(
             #nn.BatchNorm1d(self.channel_dim),
             nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel, stride=1, padding=kernel//2),
-            nn.ReLU(),#nn.LeakyReLU(0.1),
+            nn.LeakyReLU(0.1),
             nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel, stride=1, padding=kernel//2),
-            nn.ReLU(),#nn.LeakyReLU(0.1),
-            nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel, stride=1, padding=kernel//2)
+            nn.LeakyReLU(0.1),
+            nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel, stride=1, padding=kernel//2),
+            nn.Softmax(dim=1)
         )
         
-        self.encoder.apply(self._init_weights)
+        #self.encoder.apply(self._init_weights)
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv1d):
-            #nn.init.zeros_(module.weight)
-            nn.init.kaiming_normal_(module.weight)
+            nn.init.zeros_(module.weight)
+            #nn.init.kaiming_normal_(module.weight)
             #nn.init.kaiming_normal_(module.bias)
 
             #nn.init.constant_(module.bias, 0)
@@ -252,7 +253,7 @@ class conv_encoder(nn.Module):
             nn.Conv1d(self.channel, self.channel, kernel_size=kernel_cnn, stride=1, padding=kernel_cnn//2),
             nn.LeakyReLU(0.1),
             Flatten(),
-            nn.Linear(self.channel*self.len_seqs, self.latent_dim)
+            #nn.Linear(self.channel*self.len_seqs, self.latent_dim)
         )
         self.encoder_var = nn.Sequential(
             nn.Conv1d(self.channel, self.channel, kernel_size=kernel_cnn, stride=1, padding=kernel_cnn//2),
@@ -261,12 +262,12 @@ class conv_encoder(nn.Module):
             nn.LeakyReLU(0.1),
             nn.Conv1d(self.channel, self.channel, kernel_size=kernel_cnn, stride=1, padding=kernel_cnn//2),
             nn.LeakyReLU(0.1),
-            Flatten(),
-            nn.Linear(self.channel*self.len_seqs, self.latent_dim),
+            #Flatten(),
+            #nn.Linear(self.channel*self.len_seqs, self.latent_dim),
             nn.Softplus()
         )
-        self.encoder_mu.apply(self._init_weights)
-        self.encoder_var.apply(self._init_weights)
+        #self.encoder_mu.apply(self._init_weights)
+        #self.encoder_var.apply(self._init_weights)
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv1d):

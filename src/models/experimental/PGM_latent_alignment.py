@@ -14,7 +14,7 @@ class Flatten(nn.Module):
 class Regularizer(nn.Module):
     def __init__(self, default_val = 1e-7, n_comps=60):
         super(Regularizer, self).__init__()
-        self.Regularizer = torch.nn.Parameter( data = torch.tensor([default_val]*n_comps ,requires_grad=True),  requires_grad=True)
+        self.Regularizer = torch.nn.Parameter( data = torch.tensor([default_val] ,requires_grad=True),  requires_grad=True)
 
     
     def forward(self, input):
@@ -131,8 +131,8 @@ class PGM_latent_alignment(VITAE_CI):
 
         if comp <= max_r and comp >= min_r:
             prod_diag = torch.diagonal(Matrix, comp)
-            min_val = 0 #Matrix.min().item()              # to specify the gaps
-            #min_val = 0 #prod_diag.min().item()
+            #min_val = 0 #Matrix.min().item()              # to specify the gaps
+            min_val = prod_diag.min().item()
             if comp > 0 and len(prod_diag) < len(Matrix):
 
                 list_attention.append( torch.cat( 
