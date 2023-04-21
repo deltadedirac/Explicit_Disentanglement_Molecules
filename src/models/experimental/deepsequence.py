@@ -40,7 +40,7 @@ class DeepSequence(nn.Module):
         self.input_shape = input_shape
         self.latent_dim = latent_dim
         self.alphabet = alphabet
-        self.outputnonlin = nn.Softmax(dim=2)
+        self.outputnonlin = nn.Softmax(dim=-1)#nn.Softmax(dim=2)
         self.device = device
         
         # Define encoder and decoder

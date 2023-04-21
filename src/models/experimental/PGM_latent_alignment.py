@@ -2,6 +2,7 @@ from ..vitae_ci_gp_tmp import *
 from ..encoder_decoder import conv_attention
 import numpy as np
 PI = torch.from_numpy(np.asarray(np.pi))
+import math
 
 
 class Flatten(nn.Module):
@@ -33,8 +34,8 @@ class PGM_latent_alignment(VITAE_CI):
         self.outputdensity = outputdensity
         self.alphabet = kwargs["alphabet_size"]
         ndim, self.device, gp_params = kwargs["trans_parameters"]
-        self.Regularizer = Regularizer(1e-6, ndim[0]+1)
-
+        self.Regularizer = Regularizer(1e-2, ndim[0]+1)
+        self.outputnonlin = torch.nn.Softmax(dim=-1)
         # Spatial transformer
         
         self.ST_type = ST_type
@@ -131,8 +132,8 @@ class PGM_latent_alignment(VITAE_CI):
 
         if comp <= max_r and comp >= min_r:
             prod_diag = torch.diagonal(Matrix, comp)
-            #min_val = 0 #Matrix.min().item()              # to specify the gaps
-            min_val = prod_diag.min().item()
+            min_val = 0 #Matrix.min().item()              # to specify the gaps
+            #min_val = prod_diag.min().item()
             if comp > 0 and len(prod_diag) < len(Matrix):
 
                 list_attention.append( torch.cat( 
@@ -171,6 +172,12 @@ class PGM_latent_alignment(VITAE_CI):
 
         for cont, prot in enumerate(raw_seqs):
             seq = torch.matmul(prot, MC_DS_protein.T)
+            '''THE RESCALING OF THE SCORE MATRIX PLAYS A VERY IMPORTANT ROLE, PLEASE ADD IT AND ADJUST'''
+            '''-------------------------------------------------------------------------------------------'''
+            #seq = seq/math.sqrt(seq.shape[0]-1)
+            seq = seq/torch.sum(seq,dim=1).reshape(-1,1) # so far this is the best option, 
+            #seq = self.outputnonlin(seq)
+            '''-------------------------------------------------------------------------------------------'''
             list_of_attentions.append(seq)
         return list_of_attentions
 
@@ -206,7 +213,7 @@ class PGM_latent_alignment(VITAE_CI):
         x_mean_no_grad, x_var_no_grad = self.get_deepsequence_nograd(x_new,deepS)
 
         x_mean = torch.tensor(x_mean_no_grad, requires_grad=True)
-        #x_var = torch.tensor(x_var_no_grad, requires_grad=True)
+        x_var = torch.tensor(x_var_no_grad, requires_grad=True)
         '''-------------------------------------------------------------------------------------------------------'''
         # "Detransform" output
         self.stn.st_gp_cpab.interpolation_type = 'GP' 
@@ -220,7 +227,7 @@ class PGM_latent_alignment(VITAE_CI):
         #    x_var = self.outputnonlin(x_var)
         
         return x_mean.contiguous(), \
-                None, \
+                x_var.contiguous(), \
                     [z1, None], [mu1, None], [var1, None], x_new, theta_mean, KLD
 
 

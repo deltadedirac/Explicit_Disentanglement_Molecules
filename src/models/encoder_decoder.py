@@ -174,20 +174,20 @@ class conv_attention(nn.Module):
             #nn.BatchNorm1d(self.channel_dim),
             nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel, stride=1, padding=kernel//2),
             nn.LeakyReLU(0.1),
+            #nn.Dropout(0.1),
             nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel, stride=1, padding=kernel//2),
             nn.LeakyReLU(0.1),
+            #nn.Dropout(0.1),
             nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel, stride=1, padding=kernel//2),
-            nn.Softmax(dim=1)
+            nn.Softmax(dim=-1)
         )
         
-        #self.encoder.apply(self._init_weights)
+        self.encoder.apply(self._init_weights)
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv1d):
-            nn.init.zeros_(module.weight)
-            #nn.init.kaiming_normal_(module.weight)
-            #nn.init.kaiming_normal_(module.bias)
-
+            #nn.init.zeros_(module.weight)
+            nn.init.kaiming_normal_(module.weight)
             #nn.init.constant_(module.bias, 0)
 
     def forward(self, x):
