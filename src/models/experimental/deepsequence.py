@@ -41,8 +41,9 @@ class DeepSequence(nn.Module):
         self.latent_dim = latent_dim
         self.alphabet = alphabet
         self.outputnonlin = nn.Softmax(dim=-1)#nn.Softmax(dim=2)
-        self.device = device
-        
+        #self.device = device
+        self.device = (device,'cuda')[device =='gpu' or device =='cuda']
+
         # Define encoder and decoder
         self.encoder = mlp_encoder(input_shape, latent_dim, layer_ini = self.alphabet).to(self.device)
         self.decoder = mlp_decoder(input_shape, latent_dim, self.outputnonlin, layer_ini = self.alphabet).to(self.device)

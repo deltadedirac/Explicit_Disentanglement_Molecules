@@ -72,20 +72,6 @@ class ST_GP_CPAB(torch.nn.Module):
         else:
             outsize = (x.shape[1], x.shape[2]) 
 
-        """
-        if 'padding_option' in kargs:
-            padding_option = kargs['padding_option']
-            padded_idx = kargs['padded_idx']
-            non_padded_idx = kargs['non_padded_idx']
-            self.st_gp_cpab.get_interpolation_inductive_points(x, x.float(), 
-                                            outsize = outsize, 
-                                            padded_idx = padded_idx,
-                                            non_padded_idx = non_padded_idx, 
-                                            padding_option = padding_option   )
-        else:
-            self.st_gp_cpab.get_interpolation_inductive_points(x, x.float(), outsize = outsize)
-        """
-
     
     def forward(self, x, theta, outsize, inverse=False, **kargs):
         
@@ -97,13 +83,13 @@ class ST_GP_CPAB(torch.nn.Module):
                                                                         modeflag = '1D')
         return outmean
         
-    
-
     def trans_theta(self, theta):
         return theta
     
     def dim(self):
         return self.st_gp_cpab.get_theta_dim()
+    
+    
 
 def get_transformer(name):
     transformers = {'affine': ST_Affine,

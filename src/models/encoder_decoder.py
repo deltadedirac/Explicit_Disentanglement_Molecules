@@ -179,7 +179,7 @@ class conv_attention(nn.Module):
             nn.LeakyReLU(0.1),
             #nn.Dropout(0.1),
             nn.Conv1d(self.channel_dim, self.channel_dim, kernel_size=kernel, stride=1, padding=kernel//2),
-            nn.Softmax(dim=-1)
+            #nn.Softmax(dim=-1)
         )
         
         self.encoder.apply(self._init_weights)

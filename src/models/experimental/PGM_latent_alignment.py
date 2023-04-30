@@ -13,9 +13,12 @@ class Flatten(nn.Module):
         return input.view(input.size(0), -1)
     
 class Regularizer(nn.Module):
-    def __init__(self, default_val = 1e-7, n_comps=60):
+    def __init__(self, default_val = 1e-7, n_comps=60, device='cpu'):
         super(Regularizer, self).__init__()
-        self.Regularizer = torch.nn.Parameter( data = torch.tensor([default_val] ,requires_grad=True),  requires_grad=True)
+        self.device = (device,'cuda')[device =='gpu' or device =='cuda']
+        self.Regularizer = torch.nn.Parameter( data = torch.tensor([default_val] ,requires_grad=True, device = torch.device(self.device)),  requires_grad=True)
+        #self.Regularizer = torch.nn.Parameter( data = torch.tensor([default_val] ,requires_grad=True, device=torch.device(device) ),  requires_grad=True)
+
 
     
     def forward(self, input):
@@ -33,18 +36,30 @@ class PGM_latent_alignment(VITAE_CI):
         self.latent_spaces = latent_dim
         self.outputdensity = outputdensity
         self.alphabet = kwargs["alphabet_size"]
-        ndim, self.device, gp_params = kwargs["trans_parameters"]
-        self.Regularizer = Regularizer(1e-2, ndim[0]+1)
-        self.outputnonlin = torch.nn.Softmax(dim=-1)
+        #ndim, dev, gp_params = kwargs["trans_parameters"]
+        ndim, dev, gp_params = kwargs["trans_parameters"]
+        #self.device = dev #(dev,'cuda')[dev =='gpu' or dev =='cuda']
+
+        self.outputnonlin = torch.nn.Softmax(dim=2)#torch.nn.Softmax(dim=-1)
         # Spatial transformer
         
+        ''' 
+            Due to internal configuration in cpab, the spatial transformation take as 
+            device "gpu", which is not true for device options inside pytorch. That's why
+            it is necessary to make a casting of device in order to make it compatible with
+            pytorch for the calculations. the cast_device method inside gp_cpab would make
+            the job.
+        '''
+        
         self.ST_type = ST_type
-
-        self.stn = get_transformer(ST_type)(ndim, config, backend='pytorch', device=self.device, zero_boundary=False,
+        self.stn = get_transformer(ST_type)(ndim, config, backend='pytorch', device=dev, zero_boundary=False,
                                           volume_perservation=False, override=False, argparser_gpdata = gp_params)
+        
+        self.device = self.stn.st_gp_cpab.cast_device( dev )
+        self.Regularizer = Regularizer(1e-2, ndim[0]+1, self.device )
+
 
         self.Trainprocess = True
-
         self.diag_domain = kwargs['diagonal_att_regions']
         #self.attention =  conv_attention(channel_shape=abs(self.diag_domain[0]) + abs(self.diag_domain[1] + 1), 
         #                                shape_signal=self.input_shape, kernel=3)
@@ -53,18 +68,18 @@ class PGM_latent_alignment(VITAE_CI):
         self.attention =  conv_attention(channel_shape=np.sum(np.absolute(self.diag_domain))+1,
                                          input_shape = self.input_shape,
                                         shape_signal=self.input_shape[0],
-                                        kernel=5).to(torch.device(self.device))
+                                        kernel=5).to( self.device ) #to(torch.device(self.device))
 
         # Define encoder and decoder
         if isinstance(encoder,tuple) and isinstance(decoder,tuple):
-            self.encoder1 = encoder[0](input_shape, latent_dim, layer_ini = self.alphabet).to(torch.device(self.device))
-            self.decoder1 = decoder[0]((self.stn.dim(),), latent_dim, Identity(), layer_ini = self.alphabet).to(torch.device(self.device))
+            self.encoder1 = encoder[0](input_shape, latent_dim, layer_ini = self.alphabet).to( self.device )
+            self.decoder1 = decoder[0]((self.stn.dim(),), latent_dim, Identity(), layer_ini = self.alphabet).to( self.device )
             
         else:
             #self.encoder1 = encoder(input_shape, latent_dim, layer_ini = self.alphabet)
             #self.encoder1 = encoder([self.diagonal_comps, self.input_shape[0]], latent_dim, layer_ini = self.alphabet).to(torch.device(self.device))
-            self.encoder1 = encoder([self.diagonal_comps, self.input_shape[0]], latent_dim, layer_ini = self.alphabet).to(torch.device(self.device))
-            self.decoder1 = decoder((self.stn.dim(),), latent_dim, Identity(), layer_ini = self.alphabet).to(torch.device(self.device))
+            self.encoder1 = encoder([self.diagonal_comps, self.input_shape[0]], latent_dim, layer_ini = self.alphabet).to( self.device )
+            self.decoder1 = decoder((self.stn.dim(),), latent_dim, Identity(), layer_ini = self.alphabet).to( self.device )
 
 
 
