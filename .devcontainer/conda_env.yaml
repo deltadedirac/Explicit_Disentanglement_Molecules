@@ -1,4 +1,4 @@
-name: latent_msaprot_env
+name: PGM_latent_alignment
 channels:
  - defaults
  - conda-forge

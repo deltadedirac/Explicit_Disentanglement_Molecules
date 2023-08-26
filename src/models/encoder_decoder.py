@@ -81,7 +81,7 @@ class mlp_encoder(nn.Module):
             nn.Linear(self.flat_dim, 512),
             nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(512, 256),
-            nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.LeakyReLU(0.1),
             nn.Linear(256, latent_dim),
             nn.Softplus(),
         )
@@ -118,7 +118,7 @@ class mlp_decoder(nn.Module):
             nn.Linear(latent_dim, 256),
             nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(256, 512),
-            nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.LeakyReLU(0.1),
             nn.Linear(512, self.flat_dim),
             Resizing(self.output_shape),
             self.outputnonlin
@@ -127,9 +127,9 @@ class mlp_decoder(nn.Module):
         
         self.decoder_var = nn.Sequential(
             nn.Linear(latent_dim, 256),
-            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.LeakyReLU(0.1),#nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(256, 512),
-            nn.ReLU(),#nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.LeakyReLU(0.1),#nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(512, self.flat_dim),
             Resizing(self.output_shape),
             nn.Softplus()
