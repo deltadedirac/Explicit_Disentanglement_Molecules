@@ -119,7 +119,7 @@ class PGM_LA_latent_alignment(VITAE_CI):
 
         self.diagonal_comps = np.sum(np.absolute(self.diag_domain))+1
         self.attention = LightAttention(embeddings_dim=np.sum(np.absolute(self.diag_domain))+1, #-16
-                                        output_dim=self.diagonal_comps , dropout=0.1, kernel_size=5, conv_dropout = 0.1).to( self.device )
+                                        output_dim=self.diagonal_comps , dropout=0.1, kernel_size=3, conv_dropout = 0.1).to( self.device )
         
         #import ipdb; ipdb.set_trace()
         # Define encoder and decoder

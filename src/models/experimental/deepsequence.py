@@ -33,7 +33,7 @@ def log_standard_normal(x, reduction=None, dim=None):
 
 class DeepSequence(nn.Module):
 
-    def __init__(self, input_shape, latent_dim, alphabet, device = 'cpu'):
+    def __init__(self, input_shape, latent_dim, alphabet, device = 'cpu', beta=1):
         super(DeepSequence, self).__init__()
         # Constants
 
@@ -41,6 +41,7 @@ class DeepSequence(nn.Module):
         self.latent_dim = latent_dim
         self.alphabet = alphabet
         self.outputnonlin = nn.Softmax(dim=-1)#nn.Softmax(dim=2)
+        self.beta = beta
         #self.device = device
         self.device = (device,'cuda')[device =='gpu' or device =='cuda']
 
@@ -120,7 +121,7 @@ class DeepSequence(nn.Module):
                 
                 # Calculat loss
                 #loss = loss_function(method = 'CE', input = out[0].squeeze(1), target = data, forw_per=(0,2,1))
-                loss = loss_function(method = 'CE', input = out[0], target = data, forw_per=(0,2,1)) - out[5]
+                loss = loss_function(method = 'CE', input = out[0], target = data, forw_per=(0,2,1)) - self.beta*out[5]
 
                 
                 # Backpropegate and optimize
