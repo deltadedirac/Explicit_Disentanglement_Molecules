@@ -31,23 +31,30 @@ class LightAttention(nn.Module):
     def __init__(self, embeddings_dim=1024, output_dim=11, dropout=0.25, kernel_size=9, conv_dropout: float = 0.25):
         super(LightAttention, self).__init__()
 
-        self.feature_convolution = nn.Conv1d(embeddings_dim, embeddings_dim, kernel_size, stride=1,
-                                             padding=kernel_size // 2)
-        self.attention_convolution = nn.Conv1d(embeddings_dim, embeddings_dim, kernel_size, stride=1,
-                                               padding=kernel_size // 2)
+        self.feature_convolution = nn.Sequential(
+                                        nn.Conv1d(embeddings_dim, embeddings_dim, kernel_size, stride=1,
+                                             padding=kernel_size // 2),
+                                        nn.Conv1d(embeddings_dim, embeddings_dim, 3, stride=1,
+                                             padding=3 // 2) )
+        self.attention_convolution = nn.Sequential(
+                                        nn.Conv1d(embeddings_dim, embeddings_dim, kernel_size, stride=1,
+                                               padding=kernel_size // 2),
+                                        nn.Conv1d(embeddings_dim, embeddings_dim, 3, stride=1,
+                                               padding=3 // 2) ) # initially worked with kernel_size=3 for this second blocks of convolutions
 
         self.softmax = nn.Softmax(dim=-1)
 
         self.dropout = nn.Dropout(conv_dropout)
 
         self.linear = nn.Sequential(
-            nn.Linear(2 * embeddings_dim, 32),
+            #nn.Linear(2 * embeddings_dim, 32),
+            nn.Linear(2 * embeddings_dim, 320),
             nn.Dropout(dropout),
             nn.ReLU(),
-            nn.BatchNorm1d(32)
+            #nn.BatchNorm1d(32)
         )
 
-        self.output = nn.Linear(32, output_dim)
+        self.output = nn.Linear(320, output_dim)
 
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
         """
@@ -58,10 +65,17 @@ class LightAttention(nn.Module):
         Returns:
             classification: [batch_size,output_dim] tensor with logits
         """
-        #import ipdb; ipdb.set_trace()
-        o = self.feature_convolution(x)  # [batch_size, embeddings_dim, sequence_length]
-        o = self.dropout(o)  # [batch_gsize, embeddings_dim, sequence_length]
-        attention = self.attention_convolution(x)  # [batch_size, embeddings_dim, sequence_length]
+        if 'y' in kwargs:
+            # in case of deciding something similar to cross attention
+            y = kwargs['y']
+            o = self.feature_convolution(x)  # [batch_size, embeddings_dim, sequence_length]
+            o = self.dropout(o)  # [batch_gsize, embeddings_dim, sequence_length]
+            attention = self.attention_convolution(y)  # [batch_size, embeddings_dim, sequence_length]
+        else:
+            #import ipdb; ipdb.set_trace()
+            o = self.feature_convolution(x)  # [batch_size, embeddings_dim, sequence_length]
+            o = self.dropout(o)  # [batch_gsize, embeddings_dim, sequence_length]
+            attention = self.attention_convolution(x)  # [batch_size, embeddings_dim, sequence_length]
 
         # mask out the padding to which we do not want to pay any attention (we have the padding because the sequences have different lenghts).
         # This padding is added by the dataloader when using the padded_permuted_collate function in utils/general.py
@@ -76,6 +90,7 @@ class LightAttention(nn.Module):
         o = torch.cat([o1, o2], dim=-1)  # [batchsize, 2*embeddings_dim]
         o = self.linear(o)  # [batchsize, 32]
         return self.output(o).unsqueeze(1)  # [batchsize, output_dim]
+        #return torch.nn.functional.softmax(self.output(o).unsqueeze(1), dim=-1)  # [batchsize, output_dim]
     
 
 class PGM_LA_latent_alignment(VITAE_CI):
@@ -118,8 +133,9 @@ class PGM_LA_latent_alignment(VITAE_CI):
         #                                shape_signal=self.input_shape, kernel=3)
 
         self.diagonal_comps = np.sum(np.absolute(self.diag_domain))+1
-        self.attention = LightAttention(embeddings_dim=np.sum(np.absolute(self.diag_domain))+1, #-16
-                                        output_dim=self.diagonal_comps , dropout=0.1, kernel_size=3, conv_dropout = 0.1).to( self.device )
+        self.attention = LightAttention(#embeddings_dim=np.sum(np.absolute(self.diag_domain))+1, #-16
+                                        embeddings_dim=22, #-16
+                                        output_dim=self.diagonal_comps , dropout=0.25, kernel_size=9, conv_dropout = 0.25).to( self.device )
         
         #import ipdb; ipdb.set_trace()
         # Define encoder and decoder
@@ -152,11 +168,23 @@ class PGM_LA_latent_alignment(VITAE_CI):
             return torch.sum(log_p, dim)
         else:
             return log_p
+        
+    def log_prob(self, x=None, mu_e=None, log_var_e=None, z=None):
+        zz = self.reparameterize(mu_e, log_var_e)
+        return self.log_normal_diag(zz, mu_e, log_var_e)
 
     def KL(self, z, mu, log_var):
         log_z = self.log_standard_normal(z)
-        log_qz = self.log_normal_diag(z, mu, log_var)
-        return ( log_z - log_qz ).mean()
+        #log_qz = self.log_normal_diag(z, mu, log_var)
+        log_qz = self.log_prob(mu_e=mu, log_var_e=log_var, z=z)
+        return ( log_z - log_qz ).mean() #        return ( log_z - log_qz ).sum(dim=-1).mean()
+    
+    def agnostic_KL(self, sampled_attent):
+        #import ipdb; ipdb.set_trace()
+        log_z_attent= self.log_standard_normal(torch.randn_like(sampled_attent))
+        #log_q_sampled = torch.nn.functional.softmax(sampled_attent, dim=-1)
+        log_q_sampled = torch.nn.functional.gumbel_softmax(sampled_attent, tau=1, hard=False, dim=-1)
+        return ( log_z_attent - log_q_sampled ).mean()
             
     @torch.no_grad()
     def get_deepsequence_nograd(self, x, DS):
@@ -209,25 +237,7 @@ class PGM_LA_latent_alignment(VITAE_CI):
         batch_diag_attention = torch.stack(list_batch)
         return batch_diag_attention
 
-    """
-    @torch.no_grad()
-    def get_attention_matrix(self, raw_seqs, DS, iters=100):
 
-        import ipdb;ipdb.set_trace()
-        MC_DS_protein = self.MC_sampling_DeepSequence( DS, iters)
-        list_of_attentions = []
-
-        for cont, prot in enumerate(raw_seqs):
-            seq = torch.matmul(prot, MC_DS_protein.T)
-            '''THE RESCALING OF THE SCORE MATRIX PLAYS A VERY IMPORTANT ROLE, PLEASE ADD IT AND ADJUST'''
-            '''-------------------------------------------------------------------------------------------'''
-            #seq = seq/math.sqrt(seq.shape[0]-1)
-            seq = seq/torch.sum(seq,dim=1).reshape(-1,1) # so far this is the best option, 
-            #seq = self.outputnonlin(seq)
-            '''-------------------------------------------------------------------------------------------'''
-            list_of_attentions.append(seq)
-        return list_of_attentions
-    """
 
     @torch.no_grad()
     def get_attention_matrix(self, raw_seqs, DS, iters=100):
@@ -241,18 +251,31 @@ class PGM_LA_latent_alignment(VITAE_CI):
         list_of_attentions= list(seqs)
         return list_of_attentions
 
+
+
+
+        
     def forward(self, x, deepS, eq_samples=1, iw_samples=1, switch=1.0):
         # Encode/decode transformer space
         #import ipdb; ipdb.set_trace()
 
-
+        '''
         # extract the attention mechanisms between the
         l_attention = self.get_attention_matrix(x,deepS, iters=1000)
-
-        batch_diagonal_regions =  self.get_batch_diagonal_attention(l_attention, self.diag_domain[1], self.diag_domain[0], self.diag_domain[1])
-        #torch.stack(l_attention) #
+        batch_diagonal_regions =  self.get_batch_diagonal_attention(l_attention, 
+                                                                    self.diag_domain[1], 
+                                                                    self.diag_domain[0], 
+                                                                    self.diag_domain[1])
         attention_repr = self.attention(batch_diagonal_regions.permute(0,2,1))
-
+        '''
+        #import ipdb; ipdb.set_trace()
+        # This is just in case of wanting to do the task using somethign similar to
+        # to cross attention
+        attention_repr = self.attention(x=x.permute(0,2,1),
+                                        y=self.MC_sampling_DeepSequence( deepS, 10000)\
+                                            .unsqueeze(0).permute(0,2,1))
+        
+        KLD_attent = self.agnostic_KL( attention_repr)
 
         mu1, var1 = self.encoder1(attention_repr)
         z1 = self.reparameterize(mu1, var1, eq_samples, iw_samples)
@@ -288,9 +311,16 @@ class PGM_LA_latent_alignment(VITAE_CI):
         
         return x_mean, \
                 x_var, \
-                    [z1, None], [mu1, None], [var1, None], x_new, theta_mean, KLD
+                    [z1, None], [mu1, None], [var1, None], x_new, theta_mean, KLD - KLD_attent
 
 
+
+    def sample_cross_attention(self, x, DS):
+        with torch.no_grad():
+            return self.attention(x=x.permute(0,2,1),
+                                        y=DS.sample(1)[0]\
+                                        .unsqueeze(0).permute(0,2,1))
+        
     def sample_only_trans(self, x):
         device = next(self.parameters()).device
         with torch.no_grad():

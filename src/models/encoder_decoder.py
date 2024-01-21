@@ -69,20 +69,20 @@ class mlp_encoder(nn.Module):
         self.flat_dim = np.prod(input_shape)
         self.encoder_mu = nn.Sequential(
             #nn.BatchNorm1d(self.flat_dim), # flat_dim,512, 256 enc, dec backwards
-            nn.Linear(self.flat_dim, 512),
+            nn.Linear(self.flat_dim, 1512),
             nn.LeakyReLU(0.1), #nn.ReLU(),
-            nn.Linear(512, 256),
+            nn.Linear(1512, 456),
             nn.LeakyReLU(0.1), #nn.ReLU(),
-            nn.Linear(256, latent_dim),
+            nn.Linear(456, latent_dim),
             #nn.LeakyReLU(0.1)
         )
         self.encoder_var = nn.Sequential(
             #nn.BatchNorm1d(self.flat_dim),
-            nn.Linear(self.flat_dim, 512),
+            nn.Linear(self.flat_dim, 1512),
             nn.LeakyReLU(0.1), #nn.ReLU(),
-            nn.Linear(512, 256),
+            nn.Linear(1512, 456),
             nn.LeakyReLU(0.1),
-            nn.Linear(256, latent_dim),
+            nn.Linear(456, latent_dim),
             nn.Softplus(),
         )
         #self.encoder_mu.apply(self._init_weights)

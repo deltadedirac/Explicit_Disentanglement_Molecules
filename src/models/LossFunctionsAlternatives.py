@@ -52,7 +52,7 @@ class LossFunctionsAlternatives(nn.Module):
         if method == 'CE':
             #pdb.set_trace()
             self.component_vals = self.Cross_Entropy(input.permute(forw_per), target.argmax(-1))
-            self.loss= self.component_vals.mean()
+            self.loss= self.component_vals.sum(dim=-1).mean()
         elif method == 'CEmask':
             #print('from here')
             self.loss= self.Cross_Entropy(input[: , masked_idx].permute(forw_per), target[: , masked_idx].argmax(-1))
