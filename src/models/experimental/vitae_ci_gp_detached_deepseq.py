@@ -22,6 +22,7 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
 
         self.stn = get_transformer(ST_type)(ndim, config, backend='pytorch', device=device, zero_boundary=False,
                                           volume_perservation=False, override=False, argparser_gpdata = gp_params)
+        
 
         self.Trainprocess = True
         self.x_trans1 = torch.tensor([])
