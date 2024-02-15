@@ -34,11 +34,15 @@ class LightAttention(nn.Module):
         self.feature_convolution = nn.Sequential(
                                         nn.Conv1d(embeddings_dim, embeddings_dim, kernel_size, stride=1,
                                              padding=kernel_size // 2),
+                                        nn.Conv1d(embeddings_dim, embeddings_dim, 5, stride=1,
+                                             padding=5 // 2),
                                         nn.Conv1d(embeddings_dim, embeddings_dim, 3, stride=1,
                                              padding=3 // 2) )
         self.attention_convolution = nn.Sequential(
                                         nn.Conv1d(embeddings_dim, embeddings_dim, kernel_size, stride=1,
                                                padding=kernel_size // 2),
+                                        nn.Conv1d(embeddings_dim, embeddings_dim, 5, stride=1,
+                                             padding=5 // 2),
                                         nn.Conv1d(embeddings_dim, embeddings_dim, 3, stride=1,
                                                padding=3 // 2) ) # initially worked with kernel_size=3 for this second blocks of convolutions
 
@@ -135,7 +139,7 @@ class PGM_LA_latent_alignment(VITAE_CI):
         self.diagonal_comps = np.sum(np.absolute(self.diag_domain))+1
         self.attention = LightAttention(#embeddings_dim=np.sum(np.absolute(self.diag_domain))+1, #-16
                                         embeddings_dim=22, #-16
-                                        output_dim=self.diagonal_comps , dropout=0.25, kernel_size=9, conv_dropout = 0.25).to( self.device )
+                                        output_dim=self.diagonal_comps , dropout=0.03, kernel_size=9, conv_dropout = 0.03).to( self.device )
         
         #import ipdb; ipdb.set_trace()
         # Define encoder and decoder
