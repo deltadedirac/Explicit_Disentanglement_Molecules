@@ -1,0 +1,17 @@
+awk '/^>/ { 
+    if (seq) {
+        print seq
+        seq=""
+    }
+    printf("%s\t", $0)
+    next
+}
+{
+    gsub("-", "", $0)
+    seq = seq $0
+}
+END {
+    if (seq) {
+        print seq
+    }
+}' input.fasta
