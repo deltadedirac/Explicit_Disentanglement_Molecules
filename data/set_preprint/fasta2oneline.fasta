@@ -1,0 +1,19 @@
+#!/bin/awk -f
+
+awk '/^>/ { 
+    if (seq) {
+        print seq
+        seq=""
+    }
+    printf("%s\n", $0)
+    next
+}
+{
+    gsub("-", "", $0)
+    seq = seq $0
+}
+END {
+    if (seq) {
+        print seq
+    }
+}' your_input.fasta
