@@ -53,6 +53,14 @@ class DeepSequence(nn.Module):
         log_z = log_standard_normal(z)
         log_qz = log_normal_diag(z, mu, log_var)
         return ( log_z - log_qz ).mean()
+    
+    def KL_alternative(self, x):
+
+        mu, var = self.encoder(x)
+        z = self.reparameterize(mu, var, 1, 1)
+        log_z = log_standard_normal(z)
+        log_qz = log_normal_diag(z, mu, var)
+        return ( log_z - log_qz )
 
     @staticmethod
     def load_BLAT(path):
@@ -121,7 +129,7 @@ class DeepSequence(nn.Module):
                 
                 # Calculat loss
                 #loss = loss_function(method = 'CE', input = out[0].squeeze(1), target = data, forw_per=(0,2,1))
-                loss = loss_function(method = 'CE', input = out[0], target = data, forw_per=(0,2,1)) - self.beta*out[5]
+                loss = loss_function(method = 'CE', input = out[0], target = data, forw_per=(0,2,1)) + self.beta*out[5]
 
                 
                 # Backpropegate and optimize
