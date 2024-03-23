@@ -16,6 +16,7 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
         self.alphabet = kwargs["alphabet_size"]
         ndim, device, gp_params = kwargs["trans_parameters"]
 
+ 
         # Spatial transformer
         
         self.ST_type = ST_type
@@ -23,6 +24,8 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
         self.stn = get_transformer(ST_type)(ndim, config, backend='pytorch', device=device, zero_boundary=False,
                                           volume_perservation=False, override=False, argparser_gpdata = gp_params)
         
+        if 'posterior_variance' in kwargs:
+            self.stn.st_gp_cpab.set_posterior_variance(kwargs['posterior_variance'])
 
         self.Trainprocess = True
         self.x_trans1 = torch.tensor([])
@@ -64,53 +67,42 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
     def KL(self, z, mu, log_var):
         log_z = self.log_standard_normal(z)
         log_qz = self.log_normal_diag(z, mu, log_var)
-        return ( log_z - log_qz ).mean()
+        return torch.nn.functional.kl_div( log_qz, log_z, reduction='none', log_target =True)
+        #return ( log_z - log_qz ).mean()
             
+    @torch.no_grad()
     def get_deepsequence_nograd(self, x, DS):
         #x_copy = torch.tensor(x, requires_grad=False)
         with torch.no_grad():
             DS.eval()
             x_mean_no_grad, x_var_no_grad,_,__,____,_____ = DS(x) #_copy)
-        '''DS.eval()
-        x_mean_no_grad, x_var_no_grad,_,__,____,_____ = DS(x)'''
         return x_mean_no_grad, x_var_no_grad
 
     def forward(self, x, deepS, eq_samples=1, iw_samples=1, switch=1.0):
         # Encode/decode transformer space
-        #pdb.set_trace()
         mu1, var1 = self.encoder1(x)
         z1 = self.reparameterize(mu1, var1, eq_samples, iw_samples)
         theta_mean, theta_var = self.decoder1(z1)
-        theta_mean = theta_mean
         KLD = self.KL(z1, mu1, var1)
 
         # Transform input
         self.stn.st_gp_cpab.interpolation_type = 'GP'
         x_new = self.stn(x.repeat(eq_samples*iw_samples, 1, 1), theta_mean, self.Trainprocess, inverse=True)
 
-        # In case of using the log space in the prior for avoid local minima 
-        #if self.prior_space=='log':
-        #    x_new = self.outputnonlin(x_new)
+
         '''-------------------------------------------------------------------------------------------------------'''
         # Pretrained DeepSequence Output
-        x_mean_no_grad, x_var_no_grad = self.get_deepsequence_nograd(x_new,deepS)
+        x_mean, x_var = self.get_deepsequence_nograd(x_new,deepS)
 
-        x_mean = torch.tensor(x_mean_no_grad, requires_grad=True)
-        x_var = torch.tensor(x_var_no_grad, requires_grad=True)
         '''-------------------------------------------------------------------------------------------------------'''
         # "Detransform" output
         self.stn.st_gp_cpab.interpolation_type = 'GP' 
         x_mean = self.stn(x_mean, theta_mean,  self.Trainprocess, inverse=False)
         x_var = self.stn(x_var, theta_mean, self.Trainprocess, inverse=False)
-        x_var = switch*x_var + (1-switch)*0.02**2
 
-        # In case of using the log space in the prior for avoid local minima 
-        #if self.prior_space=='log':
-        #    x_mean = self.outputnonlin(x_mean)
-        #    x_var = self.outputnonlin(x_var)
         
         return x_mean.contiguous(), \
-                x_var.contiguous(), [z1, None], [mu1, None], [var1, None], x_new, theta_mean, KLD
+                x_var.contiguous(), [z1, None], [mu1, None], [var1, None], x_new, theta_mean, KLD.mean()
 
 
     def sample_only_trans(self, x):

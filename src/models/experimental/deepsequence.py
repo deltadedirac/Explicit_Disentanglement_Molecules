@@ -52,7 +52,9 @@ class DeepSequence(nn.Module):
     def KL(self, z, mu, log_var):
         log_z = log_standard_normal(z)
         log_qz = log_normal_diag(z, mu, log_var)
-        return ( log_z - log_qz ).mean()
+        return torch.nn.functional.kl_div( log_qz, log_z, reduction='none', log_target =True)
+
+        #return ( log_z - log_qz ).mean()
     
     def KL_alternative(self, x):
 
@@ -84,7 +86,7 @@ class DeepSequence(nn.Module):
         
         return x_mean.contiguous(), \
                 x_var.contiguous(), \
-                z, mu, var, KLD
+                z, mu, var, KLD.mean()
 
     def sample(self, n, switch=1.0):
         device = self.device
