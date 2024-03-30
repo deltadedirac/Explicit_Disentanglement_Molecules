@@ -52,9 +52,8 @@ class DeepSequence(nn.Module):
     def KL(self, z, mu, log_var):
         log_z = log_standard_normal(z)
         log_qz = log_normal_diag(z, mu, log_var)
-        return torch.nn.functional.kl_div( log_qz, log_z, reduction='none', log_target =True)
-
-        #return ( log_z - log_qz ).mean()
+        #return torch.nn.functional.kl_div( log_z, log_qz, reduction='none', log_target =True)
+        return ( log_z - log_qz ).mean()
     
     def KL_alternative(self, x):
 
@@ -62,6 +61,7 @@ class DeepSequence(nn.Module):
         z = self.reparameterize(mu, var, 1, 1)
         log_z = log_standard_normal(z)
         log_qz = log_normal_diag(z, mu, var)
+        #return torch.nn.functional.kl_div( log_z, log_qz, reduction='none', log_target =True)
         return ( log_z - log_qz )
 
     @staticmethod
