@@ -1,6 +1,6 @@
 from ..vitae_ci_gp_tmp import *
 PI = torch.from_numpy(np.asarray(np.pi))
-
+import torch.distributions as D
 
 
 class vitae_ci_gp_no_deepseq(VITAE_CI):
@@ -16,7 +16,9 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
         self.alphabet = kwargs["alphabet_size"]
         ndim, device, gp_params = kwargs["trans_parameters"]
 
- 
+        self.prior = D.Normal(torch.zeros(latent_dim).to(device), 
+                              torch.ones(latent_dim).to(device))
+
         # Spatial transformer
         
         self.ST_type = ST_type
@@ -53,6 +55,15 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
     
     def set_activator_for_STlayer(self, space='log'):
         self.prior_space=space
+    
+    def reparameterize(self, mu, var, eq_samples=1, iw_samples=1):
+        
+        batch_size, latent_dim = mu.shape
+        eps = torch.randn(batch_size, eq_samples, iw_samples, latent_dim, device=var.device)
+        return (mu[:,None,None,:] + var[:,None,None,:].sqrt() * eps).reshape(-1, latent_dim)
+        
+        #return D.Normal(mu,  var.sqrt()).rsample()
+
 
     def log_standard_normal(self, x, reduction=None, dim=None):
         D = x.shape[1]
@@ -65,21 +76,35 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
             return log_p
 
     def KL(self, z, mu, log_var):
+        
         log_z = self.log_standard_normal(z)
         log_qz = self.log_normal_diag(z, mu, log_var)
         return torch.nn.functional.kl_div( log_qz, log_z, reduction='none', log_target =True)
-        #return ( log_z - log_qz ).mean()
+        
+        # Due to the scarse
+        """
+        q_dist = D.Normal(mu, log_var.sqrt())
+        kl = D.kl_divergence(q_dist, self.prior)
+        return kl.mean(-1)
+        """
+        """
+        prior = D.Normal(torch.zeros_like(q_dist.mean), 
+                         torch.ones_like(q_dist.variance))
+        kl = D.kl_divergence(q_dist, prior).mean(-1)
+        """
+        
             
     @torch.no_grad()
     def get_deepsequence_nograd(self, x, DS):
         #x_copy = torch.tensor(x, requires_grad=False)
         with torch.no_grad():
             DS.eval()
-            x_mean_no_grad, x_var_no_grad,_,__,____,_____ = DS(x) #_copy)
-        return x_mean_no_grad, x_var_no_grad
+            x_mean_no_grad, x_var_no_grad,_,__,____,KLds = DS(x) #_copy)
+        return x_mean_no_grad, x_var_no_grad, KLds
 
     def forward(self, x, deepS, eq_samples=1, iw_samples=1, switch=1.0):
         # Encode/decode transformer space
+        #import ipdb; ipdb.set_trace()
         mu1, var1 = self.encoder1(x)
         z1 = self.reparameterize(mu1, var1, eq_samples, iw_samples)
         theta_mean, theta_var = self.decoder1(z1)
@@ -92,7 +117,7 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
 
         '''-------------------------------------------------------------------------------------------------------'''
         # Pretrained DeepSequence Output
-        x_mean, x_var = self.get_deepsequence_nograd(x_new,deepS)
+        x_mean, x_var, KLds = self.get_deepsequence_nograd(x_new,deepS)
 
         '''-------------------------------------------------------------------------------------------------------'''
         # "Detransform" output
@@ -102,7 +127,7 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
 
         
         return x_mean.contiguous(), \
-                x_var.contiguous(), [z1, None], [mu1, None], [var1, None], x_new, theta_mean, KLD.mean()
+                x_var.contiguous(), [z1, None], [mu1, None], [var1, None], x_new, theta_mean, KLD, KLds
 
 
     def sample_only_trans(self, x):

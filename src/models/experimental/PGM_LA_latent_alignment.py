@@ -92,6 +92,7 @@ class PGM_LA_latent_alignment(VITAE_CI):
     def __init__(self, input_shape, config, latent_dim, encoder, decoder, outputdensity, ST_type, **kwargs):
         super(VITAE_CI, self).__init__()
         # Constants
+        import ipdb; ipdb.set_trace()
 
         self.input_shape = input_shape
         self.latent_dim = latent_dim
@@ -104,7 +105,6 @@ class PGM_LA_latent_alignment(VITAE_CI):
 
         self.outputnonlin = torch.nn.Softmax(dim=2)#torch.nn.Softmax(dim=-1)
         # Spatial transformer
-        
         ''' 
             Due to internal configuration in cpab, the spatial transformation take as 
             device "gpu", which is not true for device options inside pytorch. That's why
@@ -169,16 +169,20 @@ class PGM_LA_latent_alignment(VITAE_CI):
 
     def KL(self, z, mu, log_var):
         log_z = self.log_standard_normal(z)
-        #log_qz = self.log_normal_diag(z, mu, log_var)
-        log_qz = self.log_prob(mu_e=mu, log_var_e=log_var, z=z)
+        log_qz = self.log_normal_diag(z, mu, log_var)
+        #log_qz = self.log_prob(mu_e=mu, log_var_e=log_var, z=z)
         return torch.nn.functional.kl_div( log_qz, log_z, reduction='none', log_target =True)
         #return (log_z - log_qz ).mean() #        return ( log_z - log_qz ).sum(dim=-1).mean()
     
     def agnostic_KL(self, sampled_attent):
         #import ipdb; ipdb.set_trace()
         log_z_attent= self.log_standard_normal(torch.randn_like(sampled_attent))
-        #log_q_sampled = torch.nn.functional.softmax(sampled_attent, dim=-1)
-        log_q_sampled = torch.nn.functional.gumbel_softmax(sampled_attent, tau=1, hard=False, dim=-1)
+        #log_q_sampled = torch.nn.functional.gumbel_softmax(sampled_attent, tau=1, hard=False, dim=-1)
+
+
+        #q_dist = torch.distributions.Gumbel(sampled_attent, 1)
+        q_dist=torch.distributions.Normal(sampled_attent, 1e-5)
+        log_q_sampled = q_dist.log_prob(q_dist.rsample())
         return torch.nn.functional.kl_div(log_q_sampled, log_z_attent,  reduction='none', log_target =True)
         #return ( log_z_attent - log_q_sampled ).mean()
             
@@ -187,8 +191,8 @@ class PGM_LA_latent_alignment(VITAE_CI):
         #x_copy = torch.tensor(x, requires_grad=False)
         with torch.no_grad():
             DS.eval()
-            x_mean_no_grad, x_var_no_grad,_,__,____,_____ = DS(x)
-        return x_mean_no_grad, x_var_no_grad
+            x_mean_no_grad, x_var_no_grad,_,__,____,KLds = DS(x) #_copy)
+        return x_mean_no_grad, x_var_no_grad, KLds
 
     @torch.no_grad()
     def MC_sampling_DeepSequence(self, DS, iters=100):
@@ -222,7 +226,7 @@ class PGM_LA_latent_alignment(VITAE_CI):
 
         '''-------------------------------------------------------------------------------------------------------'''
         # Pretrained DeepSequence Output
-        x_mean, x_var = self.get_deepsequence_nograd(x_new,deepS)
+        x_mean, x_var,  KLds = self.get_deepsequence_nograd(x_new,deepS)
 
         '''-------------------------------------------------------------------------------------------------------'''
         # "Detransform" output
@@ -232,7 +236,7 @@ class PGM_LA_latent_alignment(VITAE_CI):
         
         return x_mean, \
                 x_var, \
-                    [z1, None], [mu1, None], [var1, None], x_new, theta_mean, KLD.mean() + KLD_attent.mean()
+                    [z1, None], [mu1, None], [var1, None], x_new, theta_mean, KLD,  KLD_attent, KLds
 
 
 
@@ -251,3 +255,17 @@ class PGM_LA_latent_alignment(VITAE_CI):
             self.stn.st_gp_cpab.interpolation_type = 'GP'
             x_new = self.stn(x.repeat(1, 1, 1), theta_mean, self.Trainprocess, inverse=True)
             return x_new, theta_mean
+        
+    def get_elbo(data, out, reduction='none'):
+
+        ELBO  = ( torch.nn.functional.cross_entropy(out[0].permute(0,2,1), 
+                            data.argmax(-1), reduction = "none") 
+                                                + out[7].mean(-1).reshape(-1,1)
+                                                + out[8].mean(-1).reshape(-1,1) 
+                                                + out[9].mean(-1).reshape(-1,1) )
+        
+        if reduction == 'mean':
+            return ELBO.mean()
+        else:
+            return ELBO
+        

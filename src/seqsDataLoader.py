@@ -9,13 +9,13 @@ from torch.nn.utils.rnn import pad_sequence
 from Bio.SeqIO.FastaIO import SimpleFastaParser
 from Bio import AlignIO
 import itertools
+from collections import *
 
-
-def Sequence_Data_Loader(dataset_train, dataset_test=None, batch_size=16):
+def Sequence_Data_Loader(dataset_train, dataset_test=None, batch_size=16, sampler=None):
 
     # Create data loaders
-    trainloader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size)
-    testloader = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size)
+    trainloader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size, sampler=sampler)
+    testloader = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size, sampler=sampler)
     return trainloader, testloader
 
 
@@ -41,6 +41,7 @@ class seqsReader():
 
     @staticmethod
     def onehot_by_chunk_no_Ud(t, num_classes, padded_vals):
+        #import ipdb; ipdb.set_trace()
         amino_idx = (t != padded_vals).nonzero(as_tuple=True)[0]
         padding_idx = (t == padded_vals).nonzero(as_tuple=True)[0]
         one_hot_chunks = torch.cat( ( F.one_hot(t[amino_idx], num_classes), 
@@ -75,11 +76,36 @@ class seqsReader():
             seqs_numeric = []
             padded_val = 22
 
-            with open(path) as fasta_file:  # Will close handle cleanly
-                    for title, sequence in SimpleFastaParser(fasta_file):
-                            identifiers.append(title.split(None, 1)[0])  # First word is ID
-                            lengths.append(len(sequence))
-                            seqs.append(np.array(list(sequence)))
+            import ipdb; ipdb.set_trace()
+            # Read of file source to extract seq
+            if path.split('.')[-1] =='fasta':
+                with open(path) as fasta_file:  # Will close handle cleanly
+                        for title, sequence in SimpleFastaParser(fasta_file):
+                                identifiers.append(title.split(None, 1)[0])  # First word is ID
+                                lengths.append(len(sequence))
+                                seqs.append(np.array(list(sequence)))
+            else:
+                seq_names = []
+                dict_seqs=defaultdict(str)
+                filtered_dict={}
+                INPUT = open(path, "r")
+                for i, line in enumerate(INPUT):
+                    line = line.rstrip()
+                    if line.startswith(">"):
+                        name = i
+                        seq_names.append(name)
+                    else:
+                        dict_seqs[name] += line.upper().replace('.','-')
+                INPUT.close()
+
+                # Convert to list based on the order of keys
+                filtered_seqs = dict_seqs#{key: value for key, value in dict_seqs.items() if 'X' not in value}
+                import ipdb; ipdb.set_trace()
+                sorted_keys = sorted(filtered_seqs.keys())  # Sort the keys numerically
+                seqs = [ np.array(list(filtered_seqs[key])) for key in sorted_keys]  # Extract the values in sorted order
+                print('Ok')
+
+                 
 
 
             # To obtain the number of clases, as well as the alphabet and the specific numpy array of numpy arrays right into it.

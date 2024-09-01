@@ -1,5 +1,6 @@
 from ..encoder_decoder import mlp_encoder,mlp_decoder
 from ..LossFunctionsAlternatives import LossFunctionsAlternatives
+import torch.distributions as D
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
@@ -9,6 +10,8 @@ import numpy as np
 import time, os, datetime, gc, pdb
 import pickle
 PI = torch.from_numpy(np.asarray(np.pi))
+from torch.nn.utils import clip_grad_norm_, clip_grad_value_
+
 
 def log_normal_diag(x, mu, log_var, reduction=None, dim=None):
     D = x.shape[1]
@@ -44,16 +47,30 @@ class DeepSequence(nn.Module):
         self.beta = beta
         #self.device = device
         self.device = (device,'cuda')[device =='gpu' or device =='cuda']
+        """self.prior = D.Independent(D.Normal(torch.zeros(latent_dim).to(self.device),
+                                            torch.ones(latent_dim).to(self.device)), 1)
+        """
+        self.prior = D.Normal(torch.zeros(latent_dim).to(self.device), torch.ones(latent_dim).to(self.device))
 
         # Define encoder and decoder
-        self.encoder = mlp_encoder(input_shape, latent_dim, layer_ini = self.alphabet).to(self.device)
-        self.decoder = mlp_decoder(input_shape, latent_dim, self.outputnonlin, layer_ini = self.alphabet).to(self.device)
+        self.encoder = mlp_encoder(input_shape, latent_dim, layer_ini = self.alphabet, dropout=0.0).to(self.device)
+        self.decoder = mlp_decoder(input_shape, latent_dim, self.outputnonlin, layer_ini = self.alphabet, dropout=0.0).to(self.device)
 
     def KL(self, z, mu, log_var):
-        log_z = log_standard_normal(z)
-        log_qz = log_normal_diag(z, mu, log_var)
-        #return torch.nn.functional.kl_div( log_z, log_qz, reduction='none', log_target =True)
-        return ( log_z - log_qz ).mean()
+        #import ipdb; ipdb.set_trace()
+        # case of using the toy example, since torch.distributions works pretty bad
+        # when the amount of samples is very small, e.g batch_size=4. In those case
+        # the solution is to propagate the gradients calcating manually the log probabilities
+        # over Normals, otherwise, we can use torch.distributions instead
+        if z.shape[0] <= 10:
+            q_dist = D.Normal(mu, log_var.sqrt())
+            kl = D.kl_divergence(q_dist, self.prior)
+            return kl
+        else:
+            log_z = log_standard_normal(z)
+            log_qz = log_normal_diag(z, mu, log_var)
+            return torch.nn.functional.kl_div( log_qz, log_z, reduction='none', log_target =True)
+            
     
     def KL_alternative(self, x):
 
@@ -61,17 +78,27 @@ class DeepSequence(nn.Module):
         z = self.reparameterize(mu, var, 1, 1)
         log_z = log_standard_normal(z)
         log_qz = log_normal_diag(z, mu, var)
-        #return torch.nn.functional.kl_div( log_z, log_qz, reduction='none', log_target =True)
-        return ( log_z - log_qz )
+        return torch.nn.functional.kl_div( log_qz, log_z, reduction='none', log_target =True)
+        #return ( log_z - log_qz )
 
     @staticmethod
     def load_BLAT(path):
         dataset = pickle.load(open(path,'rb'))
 
     def reparameterize(self, mu, var, eq_samples=1, iw_samples=1):
+        #import ipdb; ipdb.set_trace()
         batch_size, latent_dim = mu.shape
-        eps = torch.randn(batch_size, eq_samples, iw_samples, latent_dim, device=var.device)
-        return (mu[:,None,None,:] + var[:,None,None,:].sqrt() * eps).reshape(-1, latent_dim)
+        # case of using the toy example, since torch.distributions works pretty bad
+        # when the amount of samples is very small, e.g batch_size=4. In those case
+        # the solution is to propagate the gradients calcating manually the log probabilities
+        # over Normals, otherwise, we can use torch.distributions instead
+        if batch_size <=10:
+            eps = torch.randn(batch_size, eq_samples, iw_samples, latent_dim, device=var.device)
+            return (mu[:,None,None,:] + var[:,None,None,:].sqrt() * eps).reshape(-1, latent_dim)
+        else:    
+            return D.Normal(mu,  var.sqrt()).rsample()
+
+
         
     def forward(self, x, eq_samples=1, iw_samples=1, switch=1.0):
         # Encode/decode transformer space
@@ -79,6 +106,7 @@ class DeepSequence(nn.Module):
         # Encode/decode semantic space
         mu, var = self.encoder(x)
         z = self.reparameterize(mu, var, 1, 1)
+        #import ipdb; ipdb.set_trace()
         KLD = self.KL(z, mu, var) 
         x_mean, x_var = self.decoder(z)  
         '''-------------------------------------------------------------------------------------------------------'''
@@ -86,7 +114,7 @@ class DeepSequence(nn.Module):
         
         return x_mean.contiguous(), \
                 x_var.contiguous(), \
-                z, mu, var, KLD.mean()
+                z, mu, var, KLD
 
     def sample(self, n, switch=1.0):
         device = self.device
@@ -98,8 +126,6 @@ class DeepSequence(nn.Module):
                             x_var.contiguous(), \
                                 z
 
-
-
     def training_representation( self, trainloader, loss_function, optimizer, n_epochs=10, warmup=1, logdir='', out_modelname='trained_model.pth',eq_samples=1, iw_samples=1, beta=1.0):
 
         # Dir to log results
@@ -107,12 +133,13 @@ class DeepSequence(nn.Module):
         if not os.path.exists(logdir): os.makedirs(logdir)
 
         # Summary writer
-        writer = SummaryWriter(log_dir=logdir)
+        #writer = SummaryWriter(log_dir=logdir)
 
 
         # Main loop
         self.train()
         start = time.time()
+        #import ipdb; ipdb.set_trace()
         for epoch in range(1, n_epochs+1):
             progress_bar = tqdm(desc='Epoch ' + str(epoch) + '/' + str(n_epochs), 
                                 total=len(trainloader.dataset), unit='samples')
@@ -121,7 +148,7 @@ class DeepSequence(nn.Module):
             for i, data in enumerate(trainloader):
                 # Zero gradient
                 optimizer.zero_grad()
-                #import pdb;pdb.set_trace()
+
                 # Feed forward data
                 #data = data.reshape(-1, *self.input_shape).to(torch.float32).to(self.device)
                 data = data.to(torch.float32).to(self.device)
@@ -131,14 +158,30 @@ class DeepSequence(nn.Module):
                 
                 # Calculat loss
                 #loss = loss_function(method = 'CE', input = out[0].squeeze(1), target = data, forw_per=(0,2,1))
-                loss = loss_function(method = 'CE', input = out[0], target = data, forw_per=(0,2,1)) + self.beta*out[5]
-
+                #loss = loss_function(method = 'CE', input = out[0], target = data, forw_per=(0,2,1)) + self.beta*out[5]
+                #/2222.4939
+                # prior over global parameters as it states on DeepSequence paper
+                #import ipdb; ipdb.set_trace()
                 
+                # For loss with priors and distributions that are not i.i.e
+                
+                loss = ( torch.nn.functional.cross_entropy(out[0].permute(0,2,1), 
+                                                data.argmax(-1), reduction = "none")
+                                                + self.beta*(out[5]).mean(-1).reshape(-1,1) ).mean()
+                """
+                
+                
+                 # For loss with priors and distributions that are i.i.e using D.independent
+                loss = ( torch.nn.functional.cross_entropy(out[0].permute(0,2,1), 
+                                                data.argmax(-1), reduction = "none")#.sum(-1).reshape(-1,1)
+                                                + self.beta*(out[5]).reshape(-1,1) ).mean()
+                """
                 # Backpropegate and optimize
                 # We need to maximize the bound, so in this case we need to
                 # minimize the negative bound
                 #(-loss).backward()
                 loss.backward()
+
                 optimizer.step()
                 
                 # Write to consol
@@ -147,7 +190,7 @@ class DeepSequence(nn.Module):
                 
                 # Save to tensorboard
                 iteration = epoch*len(trainloader) + i
-                writer.add_scalar('train/total_loss', loss, iteration)
+                #writer.add_scalar('train/total_loss', loss, iteration)
                 #writer.add_scalar('train/recon_loss', recon_term, iteration)
                 
                 #for j, kl_loss in enumerate(kl_terms):
@@ -168,4 +211,30 @@ class DeepSequence(nn.Module):
 
         # Close summary writer
 
-        writer.close()
+        #writer.close()
+
+    def get_elbo(self, data, out, reduction='none'):
+
+        #import ipdb; ipdb.set_trace()
+        #out_nogaps = out[0][:,:,2:].permute(0,2,1)
+        #data_nogaps = data[:,:,2:]
+        #ELBO = ( torch.nn.functional.cross_entropy(out_nogaps, 
+        #                                        data_nogaps.argmax(-1), reduction = "none") + out[5].sum(-1).reshape(-1,1) )
+        
+        # This applies when not assuming distributions with i.i.e samples, or without D.distributions.independent
+        """
+        ELBO = ( torch.nn.functional.cross_entropy(out[0].permute(0,2,1), 
+                                                data.argmax(-1), reduction = "none")
+                                                + out[5].sum(-1).reshape(-1,1) )
+        """
+        
+
+        ELBO = ( torch.nn.functional.cross_entropy(out[0].permute(0,2,1), 
+                                                data.argmax(-1), reduction = "none")#.sum(-1).reshape(-1,1)
+                                                + self.beta*(out[5]).reshape(-1,1) )
+        
+        if reduction == 'mean':
+            return ELBO.mean()
+        else:
+            return ELBO
+                

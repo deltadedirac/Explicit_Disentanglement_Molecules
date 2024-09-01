@@ -70,6 +70,6 @@ def fill_with_question_marks(filename):
     with open(filename, 'w') as file:
         file.writelines(lines)
 
-# Example usage:
+import ipdb; ipdb.set_trace()
 name = sys.argv[1]
 fill_with_question_marks(name)
