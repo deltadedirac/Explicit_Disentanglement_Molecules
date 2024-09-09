@@ -89,10 +89,11 @@ class LightAttention(nn.Module):
 
 class PGM_LA_latent_alignment(VITAE_CI):
 
-    def __init__(self, input_shape, config, latent_dim, encoder, decoder, outputdensity, ST_type, **kwargs):
+    def __init__(self, input_shape, config, latent_dim, encoder, 
+                 decoder, outputdensity, ST_type,**kwargs):
         super(VITAE_CI, self).__init__()
         # Constants
-        import ipdb; ipdb.set_trace()
+        #import ipdb; ipdb.set_trace()
 
         self.input_shape = input_shape
         self.latent_dim = latent_dim
@@ -102,7 +103,7 @@ class PGM_LA_latent_alignment(VITAE_CI):
         #ndim, dev, gp_params = kwargs["trans_parameters"]
         ndim, dev, gp_params = kwargs["trans_parameters"]
         #self.device = dev #(dev,'cuda')[dev =='gpu' or dev =='cuda']
-
+        
         self.outputnonlin = torch.nn.Softmax(dim=2)#torch.nn.Softmax(dim=-1)
         # Spatial transformer
         ''' 
@@ -128,7 +129,7 @@ class PGM_LA_latent_alignment(VITAE_CI):
 
         self.diagonal_comps = np.sum(np.absolute(self.diag_domain))+1
         self.attention = LightAttention(#embeddings_dim=np.sum(np.absolute(self.diag_domain))+1, #-16
-                                        embeddings_dim=22, #-16
+                                        embeddings_dim=self.alphabet, #-16
                                         output_dim=self.diagonal_comps , dropout=0.03, kernel_size=9, conv_dropout = 0.03).to( self.device )
         
         #import ipdb; ipdb.set_trace()
@@ -162,7 +163,14 @@ class PGM_LA_latent_alignment(VITAE_CI):
             return torch.sum(log_p, dim)
         else:
             return log_p
+
+    def reparameterize(self, mu, var, eq_samples=1, iw_samples=1):
         
+        batch_size, latent_dim = mu.shape
+        eps = torch.randn(batch_size, eq_samples, iw_samples, latent_dim, device=var.device)
+        return (mu[:,None,None,:] + var[:,None,None,:] * eps).reshape(-1, latent_dim)
+        
+        #return D.Normal(mu,  var.sqrt()).rsample()    
     def log_prob(self, x=None, mu_e=None, log_var_e=None, z=None):
         zz = self.reparameterize(mu_e, log_var_e)
         return self.log_normal_diag(zz, mu_e, log_var_e)
@@ -192,7 +200,10 @@ class PGM_LA_latent_alignment(VITAE_CI):
         with torch.no_grad():
             DS.eval()
             x_mean_no_grad, x_var_no_grad,_,__,____,KLds = DS(x) #_copy)
-        return x_mean_no_grad, x_var_no_grad, KLds
+        #return x_mean_no_grad, x_var_no_grad, KLds
+        return torch.nn.functional.softmax(x_mean_no_grad, dim=-1),\
+               torch.nn.functional.softmax(x_var_no_grad,dim=-1), KLds
+
 
     @torch.no_grad()
     def MC_sampling_DeepSequence(self, DS, iters=100):
@@ -256,13 +267,13 @@ class PGM_LA_latent_alignment(VITAE_CI):
             x_new = self.stn(x.repeat(1, 1, 1), theta_mean, self.Trainprocess, inverse=True)
             return x_new, theta_mean
         
-    def get_elbo(data, out, reduction='none'):
+    def get_elbo(self,data, out, reduction='none'):
 
         ELBO  = ( torch.nn.functional.cross_entropy(out[0].permute(0,2,1), 
                             data.argmax(-1), reduction = "none") 
                                                 + out[7].mean(-1).reshape(-1,1)
                                                 + out[8].mean(-1).reshape(-1,1) 
-                                                + out[9].mean(-1).reshape(-1,1) )
+                                                + out[9].mean(-1).reshape(-1,1) ).mean(-1)
         
         if reduction == 'mean':
             return ELBO.mean()

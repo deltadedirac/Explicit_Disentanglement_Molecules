@@ -76,16 +76,16 @@ class mlp_encoder(nn.Module):
         self.init_layers = nn.Sequential(
             nn.Linear(self.flat_dim, 1512), #1512,456 encoder and 456,1512 decoder
             nn.Dropout(self.dropout),
-            nn.LeakyReLU(0.01), #nn.ReLU(),
-            #nn.Linear(1512, 1512), #1512,456 encoder and 456,1512 decoder
-            #nn.Dropout(self.dropout),
-            #nn.LeakyReLU(0.01), #nn.ReLU(),
+            nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.Linear(1512, 1512), #1512,456 encoder and 456,1512 decoder
+            nn.Dropout(self.dropout),
+            nn.LeakyReLU(0.1), #nn.ReLU(),
         )
         self.encoder_mu = nn.Sequential(
             #nn.BatchNorm1d(self.flat_dim), # flat_dim,512, 256 enc, dec backwards
             nn.Linear(1512, 456),
             nn.Dropout(self.dropout),
-            nn.LeakyReLU(0.01), #nn.ReLU(),
+            nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(456, latent_dim),
             #nn.LeakyReLU(0.1)
         )
@@ -93,7 +93,7 @@ class mlp_encoder(nn.Module):
             #nn.BatchNorm1d(self.flat_dim),
             nn.Linear(1512, 456),
             nn.Dropout(self.dropout),
-            nn.LeakyReLU(0.01),
+            nn.LeakyReLU(0.1),
             nn.Linear(456, latent_dim),
             nn.Softplus(),
         )
@@ -103,9 +103,8 @@ class mlp_encoder(nn.Module):
     
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
-            #nn.init.kaiming_normal_(module.weight)
-            #nn.init.kaiming_normal_(module.bias)
-            nn.init.xavier_normal_(module.weight)
+            nn.init.kaiming_normal_(module.weight)
+            #nn.init.xavier_normal_(module.weight)
             nn.init.constant_(module.bias, 0.1)
             #nn.init.zeros_(module.weight)
             #nn.init.normal_(module.weight,mean=0, std=1e-8 ) # works on 1e-6, DONT FORGET
@@ -121,7 +120,8 @@ class mlp_encoder(nn.Module):
 
 #%%
 class mlp_decoder(nn.Module):
-    def __init__(self, output_shape, latent_dim, outputnonlin, **kwargs):
+    def __init__(self, output_shape, latent_dim, 
+                 outputnonlin=nn.Softmax(dim=-1), **kwargs):
         super(mlp_decoder, self).__init__()
 
         if 'dropout' in kwargs:
@@ -137,23 +137,24 @@ class mlp_decoder(nn.Module):
         self.decoder_mu = nn.Sequential(
             nn.Linear(latent_dim,500),#256
             nn.Dropout(self.dropout),
-            nn.LeakyReLU(0.01), #nn.ReLU(),
+            nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(500, 1512),#512
             nn.Dropout(self.dropout),
-            nn.LeakyReLU(0.01),
+            nn.LeakyReLU(0.1),
             nn.Linear(1512, self.flat_dim),
             Resizing(self.output_shape),
             self.outputnonlin
-            #nn.LeakyReLU(0.1) #nn.ReLU(),
+            #nn.Sigmoid()
+            #nn.LeakyReLU(0.01) #nn.ReLU(),
         )
         
         self.decoder_var = nn.Sequential(
             nn.Linear(latent_dim, 500),
             nn.Dropout(self.dropout),
-            nn.LeakyReLU(0.01),#nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.LeakyReLU(0.1),#nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(500, 1512),
             nn.Dropout(self.dropout),
-            nn.LeakyReLU(0.01),#nn.LeakyReLU(0.1), #nn.ReLU(),
+            nn.LeakyReLU(0.1),#nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(1512, self.flat_dim),
             Resizing(self.output_shape),
             nn.Softplus()
@@ -165,9 +166,9 @@ class mlp_decoder(nn.Module):
     
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
-            nn.init.xavier_normal_(module.weight)
+            #nn.init.xavier_normal_(module.weight)
             nn.init.constant_(module.bias, 0.1)
-            #nn.init.kaiming_normal_(module.weight)
+            nn.init.kaiming_normal_(module.weight)
             #nn.init.kaiming_normal_(module.bias)
 
             #nn.init.normal_(module.weight,mean=0, std=1e-8 ) # works on 1e-6, DONT FORGET

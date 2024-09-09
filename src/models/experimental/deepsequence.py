@@ -36,21 +36,24 @@ def log_standard_normal(x, reduction=None, dim=None):
 
 class DeepSequence(nn.Module):
 
-    def __init__(self, input_shape, latent_dim, alphabet, device = 'cpu', beta=1):
+    def __init__(self, input_shape, latent_dim, alphabet, device = 'cpu', 
+                 outputnonlin=nn.Softmax(dim=-1),beta=1):
         super(DeepSequence, self).__init__()
         # Constants
-
+        #import ipdb; ipdb.set_trace()
         self.input_shape = input_shape
         self.latent_dim = latent_dim
         self.alphabet = alphabet
-        self.outputnonlin = nn.Softmax(dim=-1)#nn.Softmax(dim=2)
+        #self.outputnonlin = nn.Softmax(dim=-1)
+        self.outputnonlin = outputnonlin
+
         self.beta = beta
         #self.device = device
         self.device = (device,'cuda')[device =='gpu' or device =='cuda']
         """self.prior = D.Independent(D.Normal(torch.zeros(latent_dim).to(self.device),
                                             torch.ones(latent_dim).to(self.device)), 1)
         """
-        self.prior = D.Normal(torch.zeros(latent_dim).to(self.device), torch.ones(latent_dim).to(self.device))
+        #self.prior = D.Normal(torch.zeros(latent_dim).to(self.device), torch.ones(latent_dim).to(self.device))
 
         # Define encoder and decoder
         self.encoder = mlp_encoder(input_shape, latent_dim, layer_ini = self.alphabet, dropout=0.0).to(self.device)
@@ -62,15 +65,25 @@ class DeepSequence(nn.Module):
         # when the amount of samples is very small, e.g batch_size=4. In those case
         # the solution is to propagate the gradients calcating manually the log probabilities
         # over Normals, otherwise, we can use torch.distributions instead
-        if z.shape[0] <= 10:
-            q_dist = D.Normal(mu, log_var.sqrt())
-            kl = D.kl_divergence(q_dist, self.prior)
-            return kl
-        else:
+        #import ipdb; ipdb.set_trace()
+        if z.shape[0] <= 2:
             log_z = log_standard_normal(z)
             log_qz = log_normal_diag(z, mu, log_var)
             return torch.nn.functional.kl_div( log_qz, log_z, reduction='none', log_target =True)
+        else:
+            q_dist = D.Normal(mu, log_var)
+
+            # shape of prior=[latent_size]
+            #self.prior = D.Normal(torch.zeros(self.latent_dim).to(self.device), torch.ones(self.latent_dim).to(self.device))
             
+            # shape of prior=[batch_size, latent_size]
+            self.prior = D.Normal(torch.zeros_like(q_dist.mean).to(self.device), torch.ones_like(q_dist.variance).to(self.device))
+
+            if self.prior.rsample().shape == q_dist.rsample().shape:
+                kl = D.kl_divergence(q_dist, self.prior)
+            else:
+                kl = D.kl_divergence(q_dist, self.prior)
+            return kl
     
     def KL_alternative(self, x):
 
@@ -92,11 +105,11 @@ class DeepSequence(nn.Module):
         # when the amount of samples is very small, e.g batch_size=4. In those case
         # the solution is to propagate the gradients calcating manually the log probabilities
         # over Normals, otherwise, we can use torch.distributions instead
-        if batch_size <=10:
+        if batch_size <=5:
             eps = torch.randn(batch_size, eq_samples, iw_samples, latent_dim, device=var.device)
-            return (mu[:,None,None,:] + var[:,None,None,:].sqrt() * eps).reshape(-1, latent_dim)
+            return (mu[:,None,None,:] + var[:,None,None,:] * eps).reshape(-1, latent_dim)
         else:    
-            return D.Normal(mu,  var.sqrt()).rsample()
+            return D.Normal(mu,  var).rsample()
 
 
         
@@ -229,12 +242,19 @@ class DeepSequence(nn.Module):
         """
         
 
-        ELBO = ( torch.nn.functional.cross_entropy(out[0].permute(0,2,1), 
-                                                data.argmax(-1), reduction = "none")#.sum(-1).reshape(-1,1)
-                                                + self.beta*(out[5]).reshape(-1,1) )
+        #ELBO = ( torch.nn.functional.cross_entropy(out[0].permute(0,2,1), 
+        #                                        data.argmax(-1), reduction = "none")#.sum(-1).reshape(-1,1)
+        #                                        + self.beta*(out[5]).reshape(-1,1) )
         
+        
+        ELBO = ( torch.nn.functional.cross_entropy(out[0].permute(0,2,1), 
+                                                data.argmax(-1), reduction = "none")
+                                                + self.beta*(out[5]).mean(-1).reshape(-1,1) ).mean(-1)
+        
+
+
         if reduction == 'mean':
             return ELBO.mean()
         else:
             return ELBO
-                
+        #torch.nn.functional.cross_entropy(out[0].permute(0,2,1),data.argmax(-1), reduction = "none").mean(-1).reshape(-1,1) + self.beta*(out[5]).mean(-1).reshape(-1,1)

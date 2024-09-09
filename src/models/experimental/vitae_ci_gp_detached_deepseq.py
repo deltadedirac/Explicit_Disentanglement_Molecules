@@ -22,6 +22,7 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
         # Spatial transformer
         
         self.ST_type = ST_type
+        import ipdb; ipdb.set_trace()
 
         self.stn = get_transformer(ST_type)(ndim, config, backend='pytorch', device=device, zero_boundary=False,
                                           volume_perservation=False, override=False, argparser_gpdata = gp_params)
@@ -100,7 +101,7 @@ class vitae_ci_gp_no_deepseq(VITAE_CI):
         with torch.no_grad():
             DS.eval()
             x_mean_no_grad, x_var_no_grad,_,__,____,KLds = DS(x) #_copy)
-        return x_mean_no_grad, x_var_no_grad, KLds
+        return torch.nn.functional.softmax(x_mean_no_grad, dim=-1), torch.nn.functional.softmax(x_var_no_grad, dim=-1), KLds
 
     def forward(self, x, deepS, eq_samples=1, iw_samples=1, switch=1.0):
         # Encode/decode transformer space
