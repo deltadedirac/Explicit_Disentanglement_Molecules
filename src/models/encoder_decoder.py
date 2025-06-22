@@ -95,7 +95,6 @@ class mlp_encoder(nn.Module):
             nn.Dropout(self.dropout),
             nn.LeakyReLU(0.1),
             nn.Linear(456, latent_dim),
-            nn.Softplus(),
         )
         #self.init_layers.apply(self._init_weights)
         #self.encoder_mu.apply(self._init_weights)
@@ -157,7 +156,6 @@ class mlp_decoder(nn.Module):
             nn.LeakyReLU(0.1),#nn.LeakyReLU(0.1), #nn.ReLU(),
             nn.Linear(1512, self.flat_dim),
             Resizing(self.output_shape),
-            nn.Softplus()
             #nn.LeakyReLU(0.1) #nn.ReLU(),
         )
         
