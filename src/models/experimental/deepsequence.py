@@ -54,7 +54,7 @@ class DeepSequence(nn.Module):
                                             torch.ones(latent_dim).to(self.device)), 1)
         """
         #self.prior = D.Normal(torch.zeros(latent_dim).to(self.device), torch.ones(latent_dim).to(self.device))
-
+        #import ipdb; ipdb.set_trace()
         # Define encoder and decoder
         self.encoder = mlp_encoder(input_shape, latent_dim, layer_ini = self.alphabet, dropout=0.0).to(self.device)
         self.decoder = mlp_decoder(input_shape, latent_dim, self.outputnonlin, layer_ini = self.alphabet, dropout=0.0).to(self.device)
@@ -99,7 +99,7 @@ class DeepSequence(nn.Module):
         dataset = pickle.load(open(path,'rb'))
 
     def reparameterize(self, mu, var, eq_samples=1, iw_samples=1):
-        #import ipdb; ipdb.set_trace()
+        import ipdb; ipdb.set_trace()
         batch_size, latent_dim = mu.shape
         # case of using the toy example, since torch.distributions works pretty bad
         # when the amount of samples is very small, e.g batch_size=4. In those case
@@ -118,8 +118,9 @@ class DeepSequence(nn.Module):
         '''-------------------------------------------------------------------------------------------------------'''
         # Encode/decode semantic space
         mu, var = self.encoder(x)
+        import ipdb; ipdb.set_trace()
         z = self.reparameterize(mu, var, 1, 1)
-        #import ipdb; ipdb.set_trace()
+        
         KLD = self.KL(z, mu, var) 
         x_mean, x_var = self.decoder(z)  
         '''-------------------------------------------------------------------------------------------------------'''
@@ -152,7 +153,7 @@ class DeepSequence(nn.Module):
         # Main loop
         self.train()
         start = time.time()
-        #import ipdb; ipdb.set_trace()
+        import ipdb; ipdb.set_trace()
         for epoch in range(1, n_epochs+1):
             progress_bar = tqdm(desc='Epoch ' + str(epoch) + '/' + str(n_epochs), 
                                 total=len(trainloader.dataset), unit='samples')

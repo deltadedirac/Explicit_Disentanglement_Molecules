@@ -137,7 +137,6 @@ class PGM_LA_latent_alignment(VITAE_CI):
         if isinstance(encoder,tuple) and isinstance(decoder,tuple):
             self.encoder1 = encoder[0](self.diagonal_comps, latent_dim, layer_ini = self.alphabet).to( self.device )
             self.decoder1 = decoder[0]((self.stn.dim(),), latent_dim, Identity(), layer_ini = self.alphabet).to( self.device )
-            
         else:
             self.encoder1 = encoder([self.diagonal_comps], latent_dim, layer_ini = self.alphabet).to( self.device )
             self.decoder1 = decoder((self.stn.dim(),), latent_dim, Identity(), layer_ini = self.alphabet).to( self.device )
@@ -166,9 +165,15 @@ class PGM_LA_latent_alignment(VITAE_CI):
 
     def reparameterize(self, mu, var, eq_samples=1, iw_samples=1):
         
+        #batch_size, latent_dim = mu.shape
+        #eps = torch.randn(batch_size, eq_samples, iw_samples, latent_dim, device=var.device)
+        #return (mu[:,None,None,:] + var[:,None,None,:] * eps).reshape(-1, latent_dim)
         batch_size, latent_dim = mu.shape
-        eps = torch.randn(batch_size, eq_samples, iw_samples, latent_dim, device=var.device)
-        return (mu[:,None,None,:] + var[:,None,None,:] * eps).reshape(-1, latent_dim)
+        if batch_size <=5:
+            eps = torch.randn(batch_size, eq_samples, iw_samples, latent_dim, device=var.device)
+            return (mu[:,None,None,:] + var[:,None,None,:] * eps).reshape(-1, latent_dim)
+        else:    
+            return torch.distributions.Normal(mu,  var).rsample()
         
         #return D.Normal(mu,  var.sqrt()).rsample()    
     def log_prob(self, x=None, mu_e=None, log_var_e=None, z=None):
@@ -217,6 +222,7 @@ class PGM_LA_latent_alignment(VITAE_CI):
 
         # This is just in case of wanting to do the task using somethign similar to
         # to cross attention
+        import ipdb; ipdb.set_trace()
         attention_repr = self.attention(x=x.permute(0,2,1),
                                         y=self.MC_sampling_DeepSequence( deepS, 100)\
                                             .unsqueeze(0).permute(0,2,1))
@@ -237,7 +243,10 @@ class PGM_LA_latent_alignment(VITAE_CI):
 
         '''-------------------------------------------------------------------------------------------------------'''
         # Pretrained DeepSequence Output
-        x_mean, x_var,  KLds = self.get_deepsequence_nograd(x_new,deepS)
+        #x_mean, x_var,  KLds = self.get_deepsequence_nograd(x_new,deepS)
+        #x_new=torch.nn.Softmax(dim=-1)(x_new)
+        x_mean, x_var,  KLds = self.get_deepsequence_nograd( x_new ,deepS)
+        
 
         '''-------------------------------------------------------------------------------------------------------'''
         # "Detransform" output

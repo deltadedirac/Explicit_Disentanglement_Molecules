@@ -1,15 +1,13 @@
 import pickle, json, os
 import numpy as np
 import math
-from Bio import SeqIO
+from Bio import SeqIO, pairwise2
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from bioservices import UniProt
 from tqdm import tqdm
 import requests
-
-import ipdb; ipdb.set_trace()
-
+from io import StringIO
 
 
 # Function to save a dictionary to a text file
@@ -34,7 +32,8 @@ def clustal_msa(fasta_string, file_path):
     Returns:
         str: The aligned sequences in FASTA format.
     """
-    import ipdb; ipdb.set_trace()
+    #import ipdb; ipdb.set_trace()
+    import time
     # Check if the file already exists
     if os.path.exists(file_path):
         print(f"File '{file_path}' exists. Loading its content.")
@@ -53,6 +52,7 @@ def clustal_msa(fasta_string, file_path):
 
     print("Submitting sequences for MSA...")
     response = requests.post(url, data=data)
+    time.sleep(5)
 
     if response.status_code != 200:
         raise Exception(f"Error submitting sequences to Clustal Omega: {response.text}")
@@ -166,6 +166,7 @@ def split_protein_data(tags, domain_seqs, train_ratio=0.7, val_ratio=0.2, test_r
 
 def get_subset_from_fasta_str(fasta_str, seq_amount, ref_length, filter_bylength=None):
     import ipdb; ipdb.set_trace()
+    import random
     tmp = fasta_str.split("\n")
 
 
@@ -174,11 +175,10 @@ def get_subset_from_fasta_str(fasta_str, seq_amount, ref_length, filter_bylength
         first_sequence_length = ref_length
         filtered_list=[]
         count=0
+
+        # Shuffle the indexes, to randomly pick the sequences
         # Use list comprehension to filter the sequences efficiently
         for i in range(0, len(tmp)-2, 2):
-            #print('iteration {}'.format(i))
-            #if i==63014:
-            #    print('from here'); ipdb.set_trace()
             tag = tmp[i]
             sequence = tmp[i + 1]
             if len(sequence) <= first_sequence_length:
@@ -188,17 +188,19 @@ def get_subset_from_fasta_str(fasta_str, seq_amount, ref_length, filter_bylength
                 count+=1
         tmp = filtered_list
 
-    ipdb.set_trace()
+    #ipdb.set_trace()
     
     subset = '\n'.join(tmp[0:2*seq_amount])
     return subset
+
+
 
 def download_sequences_per_batch(set_idx, batch_size=10):
 
     print( "starting sequences downloading......" )
 
     import pandas as pd
-    import ipdb; ipdb.set_trace()
+    #import ipdb; ipdb.set_trace()
 
     # Remove repetitions
     idx_ids = list(set(set_idx))
@@ -242,6 +244,7 @@ def create_or_load_fasta(names, sequences, file_path):
     Raises:
     - ValueError: If the lengths of names and sequences do not match.
     """
+    #import ipdb; ipdb.set_trace()
     # Check if the file already exists
     if os.path.exists(file_path):
         print(f"File '{file_path}' exists. Loading its content.")
@@ -254,14 +257,51 @@ def create_or_load_fasta(names, sequences, file_path):
     
     # Create the FASTA file and save the content
     fasta_content = ""
+    
     for name, sequence in zip(names, sequences):
         fasta_content += f">{name}\n{sequence}\n"
+
+    # gets the wild type for YAP1_HUMAN
+    wt = get_and_process_wildtype(
+                            DMS_data_path = '../set_preprint/DMS_Data/YAP1_HUMAN_Araya_2012.csv', 
+                            domain_reg = [170,205] )
     
+    #import ipdb; ipdb.set_trace()
+    if '>YAP1_HUMAN/170-205' not in fasta_content and ('train' in file_path or 'FULL' in file_path):
+        fasta_content = f">{'YAP1_HUMAN/170-205'}\n{wt}\n" + fasta_content
+
     with open(file_path, "w") as fasta_file:
         fasta_file.write(fasta_content)
     
     print(f"File '{file_path}' created successfully.")
     return fasta_content
+
+
+def get_and_process_wildtype(DMS_data_path, domain_reg):
+    import pandas as pd
+    import re
+    df = pd.read_csv(DMS_data_path)
+
+    wt_list = list(df.iloc[0].mutated_sequence)
+    regex_mutants = re.search(
+                    r"([A-Z])(\d+)[A-Z]:([A-Z])(\d+)[A-Z]", 
+                    df.iloc[0].mutant)
+    
+    # Since the position 0 is included into the counting, the mutant positions should be N-1,
+    # i.e. n= 170, the real position in the string must be n-1=169, and so on
+    mutant_idxs = [int(regex_mutants.group(2))-1,
+                   int(regex_mutants.group(4))-1]
+    
+    mutant_char = [regex_mutants.group(1),
+                   regex_mutants.group(3)]
+    
+    for i,aa in zip(mutant_idxs, mutant_char):
+        wt_list[i] = aa
+
+    wt = ''.join(wt_list)
+    wt = wt[domain_reg[0]-1:domain_reg[1]]
+    return wt
+
 
 
 def equalize_fasta_sequence_lengths(fasta_str, ref_max_length=None, gap_char="?"):
@@ -275,7 +315,7 @@ def equalize_fasta_sequence_lengths(fasta_str, ref_max_length=None, gap_char="?"
     Returns:
     - str: A new FASTA string with all sequences padded to the same length.
     """
-    import ipdb; ipdb.set_trace()
+    #import ipdb; ipdb.set_trace()
     def parse_fasta(fasta_str):
         """Parses a FASTA string into a list of (header, sequence) tuples."""
         fasta_lines = fasta_str.strip().splitlines()
@@ -324,7 +364,7 @@ def equalize_fasta_sequence_lengths(fasta_str, ref_max_length=None, gap_char="?"
 
 def preprocess_domain_def(hash_prots, ids, domain_def):
 
-    import ipdb; ipdb.set_trace()
+    #import ipdb; ipdb.set_trace()
 
     dom_names=[]; seq_domains=[]
     id_domain_pair = list(zip(ids,domain_def))
@@ -353,7 +393,7 @@ def preprocess_domain_def(hash_prots, ids, domain_def):
         dom_names.append( tag+'/'+'-'.join( list(map(str, dom_def)) ) )
         seq_domains.append( dom_seq )
 
-    ipdb.set_trace()
+    #ipdb.set_trace()
     dict_sets = split_protein_data(dom_names, seq_domains, train_ratio=0.5, val_ratio=0.3, 
                                                 test_ratio=0.2, seed=None, shuffle_enable=False)
     
@@ -373,15 +413,109 @@ def preprocess_domain_def(hash_prots, ids, domain_def):
     return YAP1_fasta_str_full, YAP1_fasta_str_TRAIN, YAP1_fasta_str_TEST, YAP1_fasta_str_VAL 
 
 
+def sequence_identity_aligned(seq1, seq2):
+    """Percent identity using global alignment, normalized by aligned length."""
+    aln1, aln2, score, start, end = pairwise2.align.globalxx(seq1, seq2, one_alignment_only=True)[0]
+    matches = sum(a == b for a, b in zip(aln1, aln2))
+    return matches / len(aln1)
+
+def select_most_diverse_from_reference(
+    fasta_str,
+    reference_id,
+    max_sequences=5,
+    include_reference=False,
+    allow_longer_than_ref=False,
+    mode="tie",             # "tie" or "composite"
+    identity_round=None,    # e.g., 3 or 4 to group near-equal identities (only for mode="tie")
+    length_weight=0.2       # only for mode="composite" (higher -> favor length more)
+    ):
+    """
+    Select sequences most diverse from reference.
+    
+    mode="tie": primary key = identity (rounded if identity_round set), secondary key = -length
+    mode="composite": score = identity - length_weight * (len / ref_len); lower score is better
+    
+    Returns a FASTA-format string of selected sequences (reference optionally included as first record).
+    """
+    #import ipdb; ipdb.set_trace()
+    records = list(SeqIO.parse(StringIO(fasta_str), "fasta"))
+    if not records:
+        return ""
+    
+    ref_record = next((r for r in records if r.id == reference_id), None)
+    if ref_record is None:
+        raise ValueError(f"Reference ID '{reference_id}' not found.")
+    ref_len = len(ref_record.seq)
+    
+    # Build candidate list (exclude reference itself)
+    candidates = []
+    print('scanning.....')
+    for rec in records:
+        if rec.id == reference_id:
+            continue
+        if not allow_longer_than_ref and len(rec.seq) > ref_len:
+            continue
+        identity = sequence_identity_aligned(str(rec.seq), str(ref_record.seq))
+        rec_len = len(rec.seq)
+
+        candidates.append({
+            "rec": rec,
+            "identity": identity,
+            "len": rec_len,
+            "len_norm": rec_len / ref_len if ref_len > 0 else 0.0
+        })
+    
+    if mode == "tie":
+        # use rounding to group near-equal identities (if requested)
+        if identity_round is not None:
+            for c in candidates:
+                c["id_key"] = round(c["identity"], identity_round)
+        else:
+            for c in candidates:
+                c["id_key"] = c["identity"]
+        # sort by identity key ascending (most diverse first), then by length descending
+        candidates.sort(key=lambda x: (x["id_key"], -x["len"]))
+    
+    elif mode == "composite":
+        # composite score: lower is better (more diverse and longer)
+        for c in candidates:
+            c["score"] = c["identity"] - length_weight * c["len_norm"]
+        candidates.sort(key=lambda x: x["score"])
+    
+    else:
+        raise ValueError("mode must be 'tie' or 'composite'")
+    
+    # pick top-N
+    selected = [c["rec"] for c in candidates[:max_sequences]]
+    
+    # optionally include the reference as the first entry
+    output_recs = []
+    if include_reference:
+        output_recs.append(ref_record)
+    output_recs.extend(selected)
+    
+    out_io = StringIO()
+    SeqIO.write(output_recs, out_io, "fasta")
+    return out_io.getvalue()
+
+
 
 
 if __name__ == "__main__":
 
+    #import ipdb; ipdb.set_trace()
+
     lexem='UniRef100';ids = [];domain_map=[]; wt_seq='';wt_tag=''; info_set =[]
+
+    wt = get_and_process_wildtype(
+                            DMS_data_path = '../set_preprint/DMS_Data/YAP1_HUMAN_Araya_2012.csv', 
+                            domain_reg = [170,205] )
+    
     for record in SeqIO.parse('alignments/YAP1_HUMAN_1_b0.5.a2m', 'fasta'):
 
         if record.id.split('/')[0] == 'YAP1_HUMAN':
-            wt_seq = str(record.seq); wt_tag = 'YAP1_HUMAN'
+            #wt_seq = str(record.seq); wt_tag = 'YAP1_HUMAN'
+            wt_seq = wt; wt_tag = '>YAP1_HUMAN/170-205'
 
         idx = record.id.split('/')[0].split('_')[1]
         domain_def = list(map(int, 
@@ -399,7 +533,7 @@ if __name__ == "__main__":
     info_map = {}
     fasta_entries = []
 
-    import ipdb; ipdb.set_trace()
+    #import ipdb; ipdb.set_trace()
     if os.path.exists('YAP1_seqs_dict.txt'):
         YAP1_dict = load_dict_from_txt('YAP1_seqs_dict.txt')
     else:
@@ -408,25 +542,64 @@ if __name__ == "__main__":
     YAP1_fasta_str_full, YAP1_fasta_str_TRAIN, \
             YAP1_fasta_str_TEST, YAP1_fasta_str_VAL  = preprocess_domain_def(YAP1_dict, ids, domain_map)
 
-    ipdb.set_trace()
+    #ipdb.set_trace()
     # take the sequence filtered by the length of wild type, i.e. lower or equal length as wt
-    YAP1_subset_tmp = get_subset_from_fasta_str(YAP1_fasta_str_full, 1999, ref_length =len(wt_seq), filter_bylength=True)
-    
+    #YAP1_subset_tmp = get_subset_from_fasta_str(YAP1_fasta_str_full, 1999, ref_length =len(wt_seq), filter_bylength=True)
+
+    # As the method does not include the wildtype (extracted from the input),
+    # I reattach the wildtype to my final output for creating the prior
+    """
+    YAP1_subset_tmp = f"{wt_tag}\n{wt_seq}\n" + \
+                            select_most_diverse_from_reference(YAP1_fasta_str_TRAIN, #wildtype must be included into the input
+                                                         wt_tag.replace('>',''), 
+                                                         max_sequences=3999)
+    """
+    # composite mode: trade off identity and length (length_weight controls importance)
+    YAP1_subset_tmp = select_most_diverse_from_reference( YAP1_fasta_str_TRAIN,
+                                                                reference_id=wt_tag.replace('>',''),
+                                                                max_sequences=3999,
+                                                                include_reference=True,
+                                                                allow_longer_than_ref=True,
+                                                                mode="composite",
+                                                                length_weight=0.07 # best one 0.05 with 413 aa
+                                                            )
+ 
+       
+
+
     # take the sequence without filtering fot infering transformations under very low similarity patterns,
     # i.e. domains of WW with long loops and so on.
-    YAP1_subset_density = get_subset_from_fasta_str(YAP1_fasta_str_VAL, 600, ref_length =len(wt_seq))
+    #YAP1_subset_density = get_subset_from_fasta_str(YAP1_fasta_str_VAL, 600, ref_length =len(wt_seq))
+    """
+    YAP1_subset_density = select_most_diverse_from_reference(
+                                                         f"{wt_tag}\n{wt_seq}\n" + YAP1_fasta_str_TEST, #wildtype must be included into the input
+                                                         wt_tag.replace('>',''), 
+                                                         max_sequences=600)
+    """
+    #502 max length with length_weight=0.65
+    YAP1_subset_density = select_most_diverse_from_reference( 
+                                                        f"{wt_tag}\n{wt_seq}\n" + YAP1_fasta_str_TEST,
+                                                        reference_id=wt_tag.replace('>',''),
+                                                        max_sequences=2000,
+                                                        include_reference=False,
+                                                        allow_longer_than_ref=True,
+                                                        mode="composite",
+                                                        length_weight=0.07
+                                                    )
 
     # Adding wild type for testing
-    YAP1_subset_tmp = f">{wt_tag}\n{wt_seq.upper()}\n" + YAP1_subset_tmp
+    #YAP1_subset_tmp = f">{wt_tag}\n{wt_seq.upper()}\n" + YAP1_subset_tmp
     #MSA_YAP1_set_prior = clustal_msa(YAP1_subset_tmp, 'YAP1_MSA500.a2m')
-    MSA_YAP1_set_prior = clustal_msa(YAP1_subset_tmp, 'YAP1_MSA2000.a2m')
+    MSA_YAP1_set_prior = clustal_msa(YAP1_subset_tmp, 'YAP1_MSA4000_low_sim.a2m')
 
     import ipdb; ipdb.set_trace()
     #ref_max_length = len(MSA_YAP1_set_prior.split("\n")[1])
     ref_max_length = len( ''.join(MSA_YAP1_set_prior.split('>')[1].split('\n')[1:]) ) # take the max length of wild type including gaps
     ipdb.set_trace()
     raw_seqs_for_T = equalize_fasta_sequence_lengths(YAP1_subset_density, ref_max_length=ref_max_length, gap_char="?")
-    with open('YAP1_density_to_train_padded600.fasta', "w") as fasta_file:
+    
+    #with open('YAP1_density_to_train_padded600.fasta', "w") as fasta_file:
+    with open('YAP1_density_to_train_padded2000.fasta', "w") as fasta_file:
         fasta_file.write(raw_seqs_for_T)
     
 
